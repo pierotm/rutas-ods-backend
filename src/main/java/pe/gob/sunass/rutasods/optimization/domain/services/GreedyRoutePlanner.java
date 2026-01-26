@@ -1,0 +1,341 @@
+package pe.gob.sunass.rutasods.optimization.domain.services;
+
+import pe.gob.sunass.rutasods.costing.domain.CostCalculator;
+import pe.gob.sunass.rutasods.optimization.domain.model.CandidateRoute;
+import pe.gob.sunass.rutasods.shared.domain.model.*;
+import pe.gob.sunass.rutasods.shared.domain.rules.OptimizationRules;
+import pe.gob.sunass.rutasods.shared.domain.rules.RoutingRules;
+
+import java.util.*;
+
+public class GreedyRoutePlanner {
+
+    private final ItineraryCalculator itineraryCalculator;
+    private final CostCalculator costCalculator;
+
+    public GreedyRoutePlanner(
+            ItineraryCalculator itineraryCalculator,
+            CostCalculator costCalculator
+    ) {
+        this.itineraryCalculator = itineraryCalculator;
+        this.costCalculator = costCalculator;
+    }
+
+    public List<RouteSegment> planRoutes(
+            List<Location> allPoints,
+            List<Integer> activeIndices,
+            double[][] distances,
+            double[][] durations,
+            int pcDuration,
+            int ocDuration,
+            double kmCost,
+            double foodCost,
+            double hotelCost,
+            DistanceEvaluator.ConnectionValidator validator
+    ) {
+
+        DistanceEvaluator evaluator =
+                new DistanceEvaluator(distances);
+
+        List<RouteSegment> finalRoutes = new ArrayList<>();
+
+        List<Integer> available = new ArrayList<>(activeIndices);
+
+        int routeCounter = 1;
+
+        while (!available.isEmpty()) {
+
+            // A) farthest from ODS
+            int farthest = available.get(0);
+            double maxDist = -1;
+
+            for (int idx : available) {
+                double d = evaluator.getDist(
+                        0, idx,
+                        allPoints.get(0),
+                        allPoints.get(idx),
+                        validator
+                );
+                if (d > maxDist && d != Double.POSITIVE_INFINITY) {
+                    maxDist = d;
+                    farthest = idx;
+                }
+            }
+
+            // B) neighbors
+            List<Integer> neighbors = new ArrayList<>(available);
+            neighbors.remove(Integer.valueOf(farthest));
+
+            final int farthestIdx = farthest;
+
+            neighbors.sort(Comparator.comparingDouble(
+                    i -> evaluator.getDist(
+                            farthestIdx,
+                            i,
+                            allPoints.get(farthestIdx),
+                            allPoints.get(i),
+                            validator)
+            ));
+
+
+            neighbors = neighbors.stream()
+                    .limit(OptimizationRules.SEARCH_POOL_SIZE)
+                    .toList();
+
+            CandidateRoute bestCandidate = null;
+
+            int maxNeighborsToAdd =
+                    Math.min(neighbors.size(),
+                            OptimizationRules.MAX_COMBO_SIZE - 1);
+
+            for (int k = 0; k <= maxNeighborsToAdd; k++) {
+
+                List<List<Integer>> combos =
+                        combinations(neighbors, k);
+
+                for (List<Integer> combo : combos) {
+
+                    List<Integer> cluster =
+                            new ArrayList<>();
+                    cluster.add(farthest);
+                    cluster.addAll(combo);
+
+                    List<List<Integer>> perms =
+                            permutations(cluster);
+
+                    for (List<Integer> perm : perms) {
+
+                        List<Integer> path =
+                                new ArrayList<>();
+                        path.add(0);
+                        path.addAll(perm);
+
+                        ItineraryResult itin =
+                                itineraryCalculator.calculate(
+                                        path,
+                                        allPoints,
+                                        durations,
+                                        pcDuration,
+                                        ocDuration);
+
+                        if (itin.getNumDays()
+                                > RoutingRules.MAX_ROUTE_DAYS)
+                            continue;
+
+                        double distance =
+                                computePathDistance(
+                                        perm,
+                                        allPoints,
+                                        evaluator,
+                                        validator);
+
+                        double totalCost =
+                                costCalculator.computeTotalCost(
+                                        distance,
+                                        itin.getNumDays(),
+                                        itin.getNumNights(),
+                                        perm.stream()
+                                                .map(allPoints::get)
+                                                .toList(),
+                                        kmCost,
+                                        foodCost,
+                                        hotelCost);
+
+                        double metric =
+                                totalCost / perm.size();
+
+                        if (bestCandidate == null ||
+                                metric < bestCandidate.getMetric()) {
+
+                            CandidateRoute c =
+                                    new CandidateRoute();
+                            c.setPerm(perm);
+                            c.setCost(totalCost);
+                            c.setMetric(metric);
+                            c.setItinerary(itin);
+                            c.setBreakdown(
+                                    costCalculator.breakdown(
+                                            distance,
+                                            itin.getNumDays(),
+                                            itin.getNumNights(),
+                                            perm.stream()
+                                                    .map(allPoints::get)
+                                                    .toList(),
+                                            kmCost,
+                                            foodCost,
+                                            hotelCost));
+
+                            bestCandidate = c;
+                        }
+                    }
+                }
+            }
+
+            if (bestCandidate != null) {
+
+                double routeDistance = computePathDistance(
+                        bestCandidate.getPerm(),
+                        allPoints,
+                        evaluator,
+                        validator
+                );
+
+                RouteSegment route =
+                        new RouteSegment();
+
+                route.setId((long) routeCounter);
+                route.setName("Ruta " + routeCounter);
+                route.setPoints(
+                        bestCandidate.getPerm()
+                                .stream()
+                                .map(allPoints::get)
+                                .toList());
+
+                route.setLogs(
+                        bestCandidate.getItinerary()
+                                .getLogs());
+
+                route.setTotalCost(
+                        bestCandidate.getCost());
+
+                route.setBreakdown(
+                        bestCandidate.getBreakdown());
+
+                // OSRM devuelve distancia en metros por lo que queremos es S/ por Km
+                // entonces lo convertimos
+                route.setDistance(routeDistance / 1000.0);
+                route.setDays(bestCandidate.getItinerary().getNumDays());
+                route.setNights(bestCandidate.getItinerary().getNumNights());
+
+                routeCounter++;
+
+                finalRoutes.add(route);
+
+                available.removeAll(
+                        bestCandidate.getPerm());
+            } else {
+                // fallback simple
+                int idx = available.remove(0);
+
+                List<Integer> path =
+                        List.of(0, idx);
+
+                ItineraryResult itin =
+                        itineraryCalculator.calculate(
+                                path,
+                                allPoints,
+                                durations,
+                                pcDuration,
+                                ocDuration);
+
+                double d =
+                        distances[0][idx] * 2;
+
+                RouteSegment r = new RouteSegment();
+                r.setName("Ruta fallback");
+                r.setPoints(
+                        List.of(allPoints.get(idx)));
+                r.setLogs(itin.getLogs());
+                r.setDistance(d);
+                finalRoutes.add(r);
+            }
+        }
+
+        return finalRoutes;
+    }
+
+    // ---------------- helpers -----------------
+
+    private double computePathDistance(
+            List<Integer> perm,
+            List<Location> allPoints,
+            DistanceEvaluator evaluator,
+            DistanceEvaluator.ConnectionValidator validator
+    ) {
+
+        double d = evaluator.getDist(
+                0,
+                perm.get(0),
+                allPoints.get(0),
+                allPoints.get(perm.get(0)),
+                validator);
+
+        for (int i = 0; i < perm.size() - 1; i++) {
+            d += evaluator.getDist(
+                    perm.get(i),
+                    perm.get(i + 1),
+                    allPoints.get(perm.get(i)),
+                    allPoints.get(perm.get(i + 1)),
+                    validator);
+        }
+
+        d += evaluator.getDist(
+                perm.get(perm.size() - 1),
+                0,
+                allPoints.get(perm.get(perm.size() - 1)),
+                allPoints.get(0),
+                validator);
+
+        return d;
+    }
+
+    private <T> List<List<T>> combinations(
+            List<T> input,
+            int k
+    ) {
+        List<List<T>> res = new ArrayList<>();
+        backtrackComb(res, new ArrayList<>(),
+                input, k, 0);
+        return res;
+    }
+
+    private <T> void backtrackComb(
+            List<List<T>> res,
+            List<T> curr,
+            List<T> input,
+            int k,
+            int idx
+    ) {
+        if (curr.size() == k) {
+            res.add(new ArrayList<>(curr));
+            return;
+        }
+        for (int i = idx; i < input.size(); i++) {
+            curr.add(input.get(i));
+            backtrackComb(res, curr,
+                    input, k, i + 1);
+            curr.remove(curr.size() - 1);
+        }
+    }
+
+    private <T> List<List<T>> permutations(
+            List<T> input
+    ) {
+        List<List<T>> res = new ArrayList<>();
+        permute(res,
+                new ArrayList<>(),
+                input,
+                new boolean[input.size()]);
+        return res;
+    }
+
+    private <T> void permute(
+            List<List<T>> res,
+            List<T> curr,
+            List<T> input,
+            boolean[] used
+    ) {
+        if (curr.size() == input.size()) {
+            res.add(new ArrayList<>(curr));
+            return;
+        }
+        for (int i = 0; i < input.size(); i++) {
+            if (used[i]) continue;
+            used[i] = true;
+            curr.add(input.get(i));
+            permute(res, curr, input, used);
+            curr.remove(curr.size() - 1);
+            used[i] = false;
+        }
+    }
+}
