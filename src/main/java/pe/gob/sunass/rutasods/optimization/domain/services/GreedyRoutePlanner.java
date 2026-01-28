@@ -122,16 +122,18 @@ public class GreedyRoutePlanner {
                                 > RoutingRules.MAX_ROUTE_DAYS)
                             continue;
 
-                        double distance =
+                        double distanceMeters =
                                 computePathDistance(
                                         perm,
                                         allPoints,
                                         evaluator,
                                         validator);
 
+                        double distanceKm = distanceMeters / 1000.0;
+
                         double totalCost =
                                 costCalculator.computeTotalCost(
-                                        distance,
+                                        distanceKm,
                                         itin.getNumDays(),
                                         itin.getNumNights(),
                                         perm.stream()
@@ -140,6 +142,7 @@ public class GreedyRoutePlanner {
                                         kmCost,
                                         foodCost,
                                         hotelCost);
+
 
                         double metric =
                                 totalCost / perm.size();
@@ -155,7 +158,7 @@ public class GreedyRoutePlanner {
                             c.setItinerary(itin);
                             c.setBreakdown(
                                     costCalculator.breakdown(
-                                            distance,
+                                            distanceKm,
                                             itin.getNumDays(),
                                             itin.getNumNights(),
                                             perm.stream()
@@ -173,12 +176,22 @@ public class GreedyRoutePlanner {
 
             if (bestCandidate != null) {
 
-                double routeDistance = computePathDistance(
-                        bestCandidate.getPerm(),
-                        allPoints,
-                        evaluator,
-                        validator
-                );
+                double routeDistanceMeters =
+                        computePathDistance(
+                                bestCandidate.getPerm(),
+                                allPoints,
+                                evaluator,
+                                validator
+                        );
+
+                double routeDistanceKm =
+                        computePathDistance(
+                                bestCandidate.getPerm(),
+                                allPoints,
+                                evaluator,
+                                validator
+                        );
+
 
                 RouteSegment route =
                         new RouteSegment();
@@ -203,7 +216,7 @@ public class GreedyRoutePlanner {
 
                 // OSRM devuelve distancia en metros por lo que queremos es S/ por Km
                 // entonces lo convertimos
-                route.setDistance(routeDistance / 1000.0);
+                route.setDistance(routeDistanceKm);
                 route.setDays(bestCandidate.getItinerary().getNumDays());
                 route.setNights(bestCandidate.getItinerary().getNumNights());
 
@@ -228,15 +241,15 @@ public class GreedyRoutePlanner {
                                 pcDuration,
                                 ocDuration);
 
-                double d =
-                        distances[0][idx] * 2;
+                double dKm =
+                        (distances[0][idx] * 2);
 
                 RouteSegment r = new RouteSegment();
                 r.setName("Ruta fallback");
                 r.setPoints(
                         List.of(allPoints.get(idx)));
                 r.setLogs(itin.getLogs());
-                r.setDistance(d);
+                r.setDistance(dKm);
                 finalRoutes.add(r);
             }
         }
