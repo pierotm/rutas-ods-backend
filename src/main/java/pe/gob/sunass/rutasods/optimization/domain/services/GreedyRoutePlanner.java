@@ -118,18 +118,31 @@ public class GreedyRoutePlanner {
                                         pcDuration,
                                         ocDuration);
 
+                        System.out.println(
+                                "\n[ITIN TEST] perm=" + perm +
+                                        " days=" + itin.getNumDays() +
+                                        " nights=" + itin.getNumNights()
+                        );
+
+
                         if (itin.getNumDays()
                                 > RoutingRules.MAX_ROUTE_DAYS)
                             continue;
 
-                        double distanceMeters =
+                        double distanceKm =
                                 computePathDistance(
                                         perm,
                                         allPoints,
                                         evaluator,
                                         validator);
 
-                        double distanceKm = distanceMeters / 1000.0;
+                        /*double distanceKm = distanceMeters /1000.0;*/
+
+                        System.out.println(
+                                "[DIST TEST] perm=" + perm +
+                                        " km=" + String.format("%.2f", distanceKm)
+                        );
+
 
                         double totalCost =
                                 costCalculator.computeTotalCost(
@@ -143,12 +156,28 @@ public class GreedyRoutePlanner {
                                         foodCost,
                                         hotelCost);
 
+                        System.out.println(
+                                "[COST TEST] perm=" + perm +
+                                        " days=" + itin.getNumDays() +
+                                        " nights=" + itin.getNumNights() +
+                                        " cost=" + totalCost
+                        );
+
 
                         double metric =
                                 totalCost / perm.size();
 
                         if (bestCandidate == null ||
                                 metric < bestCandidate.getMetric()) {
+
+                            System.out.println(
+                                    "[BEST UPDATE] perm=" + perm +
+                                            " metric=" + metric +
+                                            " cost=" + totalCost +
+                                            " days=" + itin.getNumDays() +
+                                            " nights=" + itin.getNumNights()
+                            );
+
 
                             CandidateRoute c =
                                     new CandidateRoute();
@@ -176,14 +205,6 @@ public class GreedyRoutePlanner {
 
             if (bestCandidate != null) {
 
-                double routeDistanceMeters =
-                        computePathDistance(
-                                bestCandidate.getPerm(),
-                                allPoints,
-                                evaluator,
-                                validator
-                        );
-
                 double routeDistanceKm =
                         computePathDistance(
                                 bestCandidate.getPerm(),
@@ -191,6 +212,7 @@ public class GreedyRoutePlanner {
                                 evaluator,
                                 validator
                         );
+
 
 
                 RouteSegment route =
@@ -214,11 +236,23 @@ public class GreedyRoutePlanner {
                 route.setBreakdown(
                         bestCandidate.getBreakdown());
 
-                // OSRM devuelve distancia en metros por lo que queremos es S/ por Km
-                // entonces lo convertimos
                 route.setDistance(routeDistanceKm);
+                System.out.println(String.format(
+                        "Ruta %d -> distancia (km) = %.3f",
+                        route.getId(),
+                        routeDistanceKm));
                 route.setDays(bestCandidate.getItinerary().getNumDays());
                 route.setNights(bestCandidate.getItinerary().getNumNights());
+
+                System.out.println(
+                        "\n[FINAL ROUTE] Ruta " + route.getId() +
+                                " perm=" + bestCandidate.getPerm() +
+                                " km=" + (routeDistanceKm) +
+                                " days=" + route.getDays() +
+                                " nights=" + route.getNights() +
+                                " cost=" + route.getTotalCost()
+                );
+
 
                 routeCounter++;
 
@@ -241,8 +275,10 @@ public class GreedyRoutePlanner {
                                 pcDuration,
                                 ocDuration);
 
+
                 double dKm =
                         (distances[0][idx] * 2);
+                /*double dKm = dMeters / 1000.0;*/
 
                 RouteSegment r = new RouteSegment();
                 r.setName("Ruta fallback");
@@ -253,6 +289,7 @@ public class GreedyRoutePlanner {
                 finalRoutes.add(r);
             }
         }
+
 
         return finalRoutes;
     }

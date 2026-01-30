@@ -61,12 +61,20 @@ public class ItineraryCalculator {
             List<Integer> tasks = new ArrayList<>();
             tasks.add(baseDuration);
 
-            for (int k = 0; k < targetPoint.getOcCount(); k++) {
-                tasks.add(RoutingRules.OC_DURATION);
+            for (int k = 1; k < targetPoint.getOcCount(); k++) {
+                tasks.add(ocDuration);
             }
 
             for (Integer taskDuration : tasks) {
 
+                System.out.println(
+                        "[DAY BREAK] currTime=" + currentTime +
+                                " travel=" + travelTime +
+                                " task=" + taskDuration +
+                                " MAX=" + RoutingRules.MAX_WORK_DAY
+                );
+
+                /*Si quieres que el greedy intente exprimir más el día usa MAX_TOTAL_DAY*/
                 if (currentTime + taskDuration > RoutingRules.MAX_WORK_DAY) {
 
                     closeDay(currentLog, targetPoint.getName(),
@@ -104,6 +112,12 @@ public class ItineraryCalculator {
 
         int originIdx = pathIndices.get(0);
         int returnTime = (int) timeMatrix[currentLocIdx][originIdx];
+
+        System.out.println(
+                "[RETURN CHECK] currTime=" + currentTime +
+                        " return=" + returnTime +
+                        " MAX_TOTAL=" + RoutingRules.MAX_TOTAL_DAY
+        );
 
         if (currentTime + returnTime > RoutingRules.MAX_TOTAL_DAY) {
 

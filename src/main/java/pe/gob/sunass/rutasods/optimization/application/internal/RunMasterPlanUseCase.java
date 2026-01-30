@@ -101,6 +101,11 @@ public class RunMasterPlanUseCase {
                         .toList();
 
         // 6) ejecutar greedy
+        System.out.println(
+                "pcDuration=" + request.getPcDuration() +
+                        " ocDuration=" + request.getOcDuration()
+        );
+
         List<RouteSegment> routes =
                 planner.planRoutes(
                         allPoints,
@@ -124,6 +129,7 @@ public class RunMasterPlanUseCase {
                                 : 570,
                         (a, b) -> true // isValidConnection stub
                 );
+
 
         // 7) totales
         double totalSystemCost =
