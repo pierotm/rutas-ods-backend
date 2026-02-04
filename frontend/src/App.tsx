@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { MapContainer, Marker, Popup, Polyline, TileLayer } from "react-leaflet";
+import {
+  MapContainer,
+  Marker,
+  Popup,
+  Polyline,
+  TileLayer,
+} from "react-leaflet";
 import L from "leaflet";
 
 declare const XLSX: any;
@@ -83,7 +89,11 @@ export default function App() {
   };
 
   const handleToggleActive = (id: number) => {
-    setLocations((prev) => prev.map((loc) => (loc.id === id ? { ...loc, isActive: !loc.isActive } : loc)));
+    setLocations((prev) =>
+      prev.map((loc) =>
+        loc.id === id ? { ...loc, isActive: !loc.isActive } : loc,
+      ),
+    );
     setMasterPlan(null);
   };
 
@@ -92,11 +102,13 @@ export default function App() {
       prev.map((l) => {
         if (l.id === locationId) {
           const currentCount = l.ocCount;
-          const newCount = increment ? Math.min(3, currentCount + 1) : Math.max(0, currentCount - 1);
+          const newCount = increment
+            ? Math.min(3, currentCount + 1)
+            : Math.max(0, currentCount - 1);
           return { ...l, ocCount: newCount };
         }
         return l;
-      })
+      }),
     );
   };
 
@@ -124,15 +136,41 @@ export default function App() {
 
       (jsonData as any[]).forEach((row: any) => {
         const name = row.Nombre || row.nombre || `Punto ${startId}`;
-        const lat = parseFloat(row.Latitud || row.latitud || row.Lat || row.lat);
-        const lng = parseFloat(row.Longitud || row.longitud || row.Lng || row.lng || row.Lon || row.lon);
+        const lat = parseFloat(
+          row.Latitud || row.latitud || row.Lat || row.lat,
+        );
+        const lng = parseFloat(
+          row.Longitud ||
+            row.longitud ||
+            row.Lng ||
+            row.lng ||
+            row.Lon ||
+            row.lon,
+        );
         const ubigeo = (row.Ubigeo || row.ubigeo || "").toString().trim();
 
         let category: "PC" | "OC" = "PC";
-        const rawCat = (row.Categoria || row.categoria || row.Cat || row.cat || "").toString().toUpperCase().trim();
+        const rawCat = (
+          row.Categoria ||
+          row.categoria ||
+          row.Cat ||
+          row.cat ||
+          ""
+        )
+          .toString()
+          .toUpperCase()
+          .trim();
         if (rawCat === "OC") category = "OC";
 
-        const relatedUbigeo = (row.Relacion || row.relacion || row.Rel || row.rel || "").toString().trim();
+        const relatedUbigeo = (
+          row.Relacion ||
+          row.relacion ||
+          row.Rel ||
+          row.rel ||
+          ""
+        )
+          .toString()
+          .trim();
 
         if (!isNaN(lat) && !isNaN(lng)) {
           newLocations.push({
@@ -154,14 +192,21 @@ export default function App() {
 
       if (validNewLocations.length > 0) {
         setLocations((prev) => [...prev, ...validNewLocations]);
-        setLogs((prev) => [`✓ Importados ${validNewLocations.length} puntos desde Excel.`, ...prev]);
+        setLogs((prev) => [
+          `✓ Importados ${validNewLocations.length} puntos desde Excel.`,
+          ...prev,
+        ]);
 
         if (newLocations.length > spaceRemaining) {
-          alert(`Nota: Se importaron solo los primeros ${spaceRemaining} puntos para respetar el límite total de ${targetPoints}.`);
+          alert(
+            `Nota: Se importaron solo los primeros ${spaceRemaining} puntos para respetar el límite total de ${targetPoints}.`,
+          );
         }
         resetMatrices();
       } else {
-        alert("No se encontraron puntos válidos en el Excel. Asegúrese de que las columnas tengan los encabezados: Nombre, Latitud, Longitud.");
+        alert(
+          "No se encontraron puntos válidos en el Excel. Asegúrese de que las columnas tengan los encabezados: Nombre, Latitud, Longitud.",
+        );
       }
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
@@ -175,7 +220,10 @@ export default function App() {
   useEffect(() => {
     if (rawTimeMatrix.length > 0) {
       const factored = rawTimeMatrix.map((row) =>
-        row.map((val) => ({ value: parseFloat((val * timeFactor).toFixed(1)), loading: false }))
+        row.map((val) => ({
+          value: parseFloat((val * timeFactor).toFixed(1)),
+          loading: false,
+        })),
       );
       setTimeMatrix(factored);
     }
@@ -188,7 +236,8 @@ export default function App() {
   }, [viewMode, masterPlan, matrixLocations.length]);
 
   const runMatrixCalculation = async () => {
-    if (locations.length < 1) return alert("Agrega puntos al mapa o importa desde Excel.");
+    if (locations.length < 1)
+      return alert("Agrega puntos al mapa o importa desde Excel.");
     const ods = parseCoords(odsInput);
     if (!ods) return alert("Ingresa coordenadas ODS válidas.");
 
@@ -211,14 +260,21 @@ export default function App() {
       };
       const matrixPoints = [odsLoc, ...locations];
 
-      const { distances, durations } = await fetchOSRMTable(matrixPoints, matrixPoints, ctrl.signal);
+      const { distances, durations } = await fetchOSRMTable(
+        matrixPoints,
+        matrixPoints,
+        ctrl.signal,
+      );
 
-      setDistanceMatrix(distances.map((row) => row.map((v) => ({ value: v, loading: false }))));
+      setDistanceMatrix(
+        distances.map((row) => row.map((v) => ({ value: v, loading: false }))),
+      );
       setRawTimeMatrix(durations);
       setMatrixLocations(matrixPoints);
       setLogs((prev) => ["✓ Matriz calculada (Datos OSRM).", ...prev]);
     } catch (e: any) {
-      if (e.name !== "AbortError") setLogs((prev) => ["❌ Error en Matriz.", ...prev]);
+      if (e.name !== "AbortError")
+        setLogs((prev) => ["❌ Error en Matriz.", ...prev]);
     } finally {
       setIsProcessing(false);
     }
@@ -237,7 +293,10 @@ export default function App() {
     setViewMode("optimization");
 
     const enabledLocations = locations.filter((l) => l.isActive);
-    setLogs((prev) => [`🚀 Planificando ruta (Grafo Restringido) para ${Math.min(coverageLimit, enabledLocations.length)} de ${enabledLocations.length} activos...`, ...prev]);
+    setLogs((prev) => [
+      `🚀 Planificando ruta (Grafo Restringido) para ${Math.min(coverageLimit, enabledLocations.length)} de ${enabledLocations.length} activos...`,
+      ...prev,
+    ]);
 
     try {
       const odsLoc: Location = {
@@ -257,7 +316,10 @@ export default function App() {
       let distances: number[][];
       let durations: number[][];
 
-      const fullMatrixAvailable = matrixLocations.length > 0 && distanceMatrix.length > 0 && rawTimeMatrix.length > 0;
+      const fullMatrixAvailable =
+        matrixLocations.length > 0 &&
+        distanceMatrix.length > 0 &&
+        rawTimeMatrix.length > 0;
 
       if (fullMatrixAvailable) {
         const subDist: number[][] = [];
@@ -275,8 +337,13 @@ export default function App() {
         }
 
         if (mappingSuccess) {
-          setLogs((prev) => ["⚡ Reutilizando Matriz existente (Sub-conjunto)...", ...prev]);
-          const distMatVals = distanceMatrix.map((row) => row.map((c) => c.value));
+          setLogs((prev) => [
+            "⚡ Reutilizando Matriz existente (Sub-conjunto)...",
+            ...prev,
+          ]);
+          const distMatVals = distanceMatrix.map((row) =>
+            row.map((c) => c.value),
+          );
 
           for (let i = 0; i < allOptimizationPoints.length; i++) {
             const rowD: number[] = [];
@@ -291,22 +358,37 @@ export default function App() {
           distances = subDist;
           durations = subDur;
         } else {
-          setLogs((prev) => ["⚠️ Matriz incompleta, descargando nuevos datos...", ...prev]);
-          const res = await fetchOSRMTable(allOptimizationPoints, allOptimizationPoints, ctrl.signal);
+          setLogs((prev) => [
+            "⚠️ Matriz incompleta, descargando nuevos datos...",
+            ...prev,
+          ]);
+          const res = await fetchOSRMTable(
+            allOptimizationPoints,
+            allOptimizationPoints,
+            ctrl.signal,
+          );
           distances = res.distances;
           durations = res.durations;
         }
       } else {
-        const res = await fetchOSRMTable(allOptimizationPoints, allOptimizationPoints, ctrl.signal);
+        const res = await fetchOSRMTable(
+          allOptimizationPoints,
+          allOptimizationPoints,
+          ctrl.signal,
+        );
         distances = res.distances;
         durations = res.durations;
       }
 
-      setDistanceMatrix(distances.map((row) => row.map((v) => ({ value: v, loading: false }))));
+      setDistanceMatrix(
+        distances.map((row) => row.map((v) => ({ value: v, loading: false }))),
+      );
       setRawTimeMatrix(durations);
       setMatrixLocations(allOptimizationPoints);
 
-      const factoredDurations = durations.map((row) => row.map((val) => parseFloat((val * timeFactor).toFixed(1))));
+      const factoredDurations = durations.map((row) =>
+        row.map((val) => parseFloat((val * timeFactor).toFixed(1))),
+      );
 
       const getDist = (i: number, j: number) => {
         const p1 = allOptimizationPoints[i];
@@ -323,7 +405,8 @@ export default function App() {
       const MAX_COMBO_SIZE = 6;
 
       while (availableIndices.length > 0) {
-        if (ctrl.signal.aborted) throw new DOMException("Aborted", "AbortError");
+        if (ctrl.signal.aborted)
+          throw new DOMException("Aborted", "AbortError");
 
         let farthestIdx = -1;
         let maxDist = -1;
@@ -337,8 +420,12 @@ export default function App() {
         if (farthestIdx === -1) farthestIdx = availableIndices[0];
 
         const otherIndices = availableIndices.filter((i) => i !== farthestIdx);
-        otherIndices.sort((a, b) => getDist(farthestIdx, a) - getDist(farthestIdx, b));
-        const validNeighbors = otherIndices.filter((i) => getDist(farthestIdx, i) !== Infinity);
+        otherIndices.sort(
+          (a, b) => getDist(farthestIdx, a) - getDist(farthestIdx, b),
+        );
+        const validNeighbors = otherIndices.filter(
+          (i) => getDist(farthestIdx, i) !== Infinity,
+        );
         const neighbors = validNeighbors.slice(0, SEARCH_POOL_SIZE);
 
         let bestCandidate = {
@@ -349,7 +436,10 @@ export default function App() {
           breakdown: null as any,
         };
 
-        const maxNeighborsToAdd = Math.min(neighbors.length, MAX_COMBO_SIZE - 1);
+        const maxNeighborsToAdd = Math.min(
+          neighbors.length,
+          MAX_COMBO_SIZE - 1,
+        );
 
         for (let k = 0; k <= maxNeighborsToAdd; k++) {
           const neighborCombos = getCombinations<number>(neighbors, k);
@@ -373,14 +463,22 @@ export default function App() {
                   break;
                 }
               }
-              if (getDist(perm[perm.length - 1], 0) === Infinity) chainValid = false;
+              if (getDist(perm[perm.length - 1], 0) === Infinity)
+                chainValid = false;
               if (!chainValid) continue;
 
-              const itin = calculateItinerary(pathIndices, allOptimizationPoints, factoredDurations, pcDuration, ocDuration);
+              const itin = calculateItinerary(
+                pathIndices,
+                allOptimizationPoints,
+                factoredDurations,
+                pcDuration,
+                ocDuration,
+              );
               if (itin.num_days > MAX_ROUTE_DAYS) continue;
 
               let d = getDist(0, perm[0]);
-              for (let i = 0; i < perm.length - 1; i++) d += getDist(perm[i], perm[i + 1]);
+              for (let i = 0; i < perm.length - 1; i++)
+                d += getDist(perm[i], perm[i + 1]);
               d += getDist(perm[perm.length - 1], 0);
 
               const nights = itin.num_nights;
@@ -388,7 +486,10 @@ export default function App() {
               const foodC = costs.food * itin.num_days;
               const hotelC = costs.hotel * nights;
 
-              const ocExtra = perm.reduce((acc, idx) => acc + (allOptimizationPoints[idx]?.ocCount || 0), 0);
+              const ocExtra = perm.reduce(
+                (acc, idx) => acc + (allOptimizationPoints[idx]?.ocCount || 0),
+                0,
+              );
               const ocC = ocExtra * OC_UNIT_COST;
 
               const totalC = gasC + foodC + hotelC + ocC;
@@ -397,32 +498,50 @@ export default function App() {
                 minClusterCost = totalC;
                 bestPermForCluster = perm;
                 bestClusterItin = itin;
-                bestClusterBreakdown = { gas: gasC, food: foodC, hotel: hotelC, oc: ocC };
+                bestClusterBreakdown = {
+                  gas: gasC,
+                  food: foodC,
+                  hotel: hotelC,
+                  oc: ocC,
+                };
               }
             }
 
             if (bestPermForCluster && bestClusterItin && bestClusterBreakdown) {
               const metric = minClusterCost / bestPermForCluster.length;
               if (metric < bestCandidate.metric) {
-                bestCandidate = { perm: bestPermForCluster, cost: minClusterCost, metric, itin: bestClusterItin, breakdown: bestClusterBreakdown };
+                bestCandidate = {
+                  perm: bestPermForCluster,
+                  cost: minClusterCost,
+                  metric,
+                  itin: bestClusterItin,
+                  breakdown: bestClusterBreakdown,
+                };
               }
             }
           }
         }
 
-        if (bestCandidate.perm.length > 0 && bestCandidate.itin && bestCandidate.breakdown) {
+        if (
+          bestCandidate.perm.length > 0 &&
+          bestCandidate.itin &&
+          bestCandidate.breakdown
+        ) {
           const bestPermIndices = bestCandidate.perm;
           const bestItin = bestCandidate.itin;
           const bestBreakdown = bestCandidate.breakdown;
 
           let d = getDist(0, bestPermIndices[0]);
-          for (let i = 0; i < bestPermIndices.length - 1; i++) d += getDist(bestPermIndices[i], bestPermIndices[i + 1]);
+          for (let i = 0; i < bestPermIndices.length - 1; i++)
+            d += getDist(bestPermIndices[i], bestPermIndices[i + 1]);
           d += getDist(bestPermIndices[bestPermIndices.length - 1], 0);
 
           finalRoutes.push({
             id: routeCounter,
             name: `Ruta ${routeCounter}`,
-            points: bestPermIndices.map((idx: number) => allOptimizationPoints[idx]),
+            points: bestPermIndices.map(
+              (idx: number) => allOptimizationPoints[idx],
+            ),
             logs: bestItin.logs,
             totalCost: bestCandidate.cost,
             breakdown: bestBreakdown,
@@ -435,11 +554,19 @@ export default function App() {
           routeCounter++;
 
           const usedSet = new Set(bestPermIndices);
-          availableIndices = availableIndices.filter((idx) => !usedSet.has(idx));
+          availableIndices = availableIndices.filter(
+            (idx) => !usedSet.has(idx),
+          );
         } else {
           const failIdx = farthestIdx;
           const pathIndices = [0, failIdx];
-          const itin = calculateItinerary(pathIndices, allOptimizationPoints, factoredDurations, pcDuration, ocDuration);
+          const itin = calculateItinerary(
+            pathIndices,
+            allOptimizationPoints,
+            factoredDurations,
+            pcDuration,
+            ocDuration,
+          );
           const d = distances[0][failIdx] * 2;
           const nights = itin.num_nights;
           const gasC = d * costs.km;
@@ -468,13 +595,26 @@ export default function App() {
       }
 
       finalRoutes.forEach((r: any, idx: number) => {
-        if (!String(r.color).includes("ef4444")) r.color = ROUTE_COLORS[idx % ROUTE_COLORS.length];
+        if (!String(r.color).includes("ef4444"))
+          r.color = ROUTE_COLORS[idx % ROUTE_COLORS.length];
       });
 
-      const totalSystemCost = finalRoutes.reduce((acc: number, r: any) => acc + r.totalCost, 0);
-      const totalDistance = finalRoutes.reduce((acc: number, r: any) => acc + r.distance, 0);
-      const totalNights = finalRoutes.reduce((acc: number, r: any) => acc + r.nights, 0);
-      const totalDays = finalRoutes.reduce((acc: number, r: any) => acc + r.days, 0);
+      const totalSystemCost = finalRoutes.reduce(
+        (acc: number, r: any) => acc + r.totalCost,
+        0,
+      );
+      const totalDistance = finalRoutes.reduce(
+        (acc: number, r: any) => acc + r.distance,
+        0,
+      );
+      const totalNights = finalRoutes.reduce(
+        (acc: number, r: any) => acc + r.nights,
+        0,
+      );
+      const totalDays = finalRoutes.reduce(
+        (acc: number, r: any) => acc + r.days,
+        0,
+      );
 
       setMasterPlan({
         totalSystemCost,
@@ -485,7 +625,10 @@ export default function App() {
         pointsCovered: activeLocations.length,
       });
 
-      setLogs((prev) => [`✓ Plan generado para ${activeLocations.length} puntos activos.`, ...prev]);
+      setLogs((prev) => [
+        `✓ Plan generado para ${activeLocations.length} puntos activos.`,
+        ...prev,
+      ]);
     } catch (e: any) {
       if (e.name !== "AbortError") {
         console.error(e);
@@ -505,56 +648,118 @@ export default function App() {
   const renderMasterPlan = () => {
     if (!masterPlan) return null;
 
-    const pcCount = masterPlan.routes.reduce((acc, r) => acc + r.points.filter((p) => p.category === "PC").length, 0);
-    const ocCount = masterPlan.routes.reduce((acc, r) => acc + r.points.filter((p) => p.category === "OC").length, 0);
+    const pcCount = masterPlan.routes.reduce(
+      (acc, r) => acc + r.points.filter((p) => p.category === "PC").length,
+      0,
+    );
+    const ocCount = masterPlan.routes.reduce(
+      (acc, r) => acc + r.points.filter((p) => p.category === "OC").length,
+      0,
+    );
 
     return (
       <div className="space-y-8 animate-fade-in">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="bg-sunass-blue text-white p-4 rounded-2xl shadow-xl border border-sunass-blue transform hover:scale-102 transition-transform col-span-2 md:col-span-1">
-            <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">Costo Total Sistema</p>
-            <p className="text-2xl font-black mt-1">S/. {masterPlan.totalSystemCost.toFixed(2)}</p>
-            <p className="text-[8px] mt-2 italic opacity-90">Para {masterPlan.pointsCovered} puntos</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">
+              Costo Total Sistema
+            </p>
+            <p className="text-2xl font-black mt-1">
+              S/. {masterPlan.totalSystemCost.toFixed(2)}
+            </p>
+            <p className="text-[8px] mt-2 italic opacity-90">
+              Para {masterPlan.pointsCovered} puntos
+            </p>
           </div>
           <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Rutas Generadas</p>
-            <p className="text-2xl font-black text-slate-800 mt-1">{masterPlan.routes.length}</p>
-            <p className="text-[8px] text-slate-400 mt-2 italic">Flota requerida</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Rutas Generadas
+            </p>
+            <p className="text-2xl font-black text-slate-800 mt-1">
+              {masterPlan.routes.length}
+            </p>
+            <p className="text-[8px] text-slate-400 mt-2 italic">
+              Flota requerida
+            </p>
           </div>
           <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Puntos PC</p>
-            <p className="text-2xl font-black text-sunass-blue mt-1">{pcCount}</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Puntos PC
+            </p>
+            <p className="text-2xl font-black text-sunass-blue mt-1">
+              {pcCount}
+            </p>
             <p className="text-[8px] text-slate-400 mt-2 italic">Cubiertos</p>
           </div>
           <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Puntos OC</p>
-            <p className="text-2xl font-black text-purple-600 mt-1">{ocCount}</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Puntos OC
+            </p>
+            <p className="text-2xl font-black text-purple-600 mt-1">
+              {ocCount}
+            </p>
             <p className="text-[8px] text-slate-400 mt-2 italic">Cubiertos</p>
           </div>
           <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Distancia Total</p>
-            <p className="text-2xl font-black text-slate-800 mt-1">{masterPlan.totalDistance.toFixed(0)} km</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Distancia Total
+            </p>
+            <p className="text-2xl font-black text-slate-800 mt-1">
+              {masterPlan.totalDistance.toFixed(0)} km
+            </p>
           </div>
           <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Noches</p>
-            <p className="text-2xl font-black text-slate-800 mt-1">{masterPlan.totalNights}</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Total Noches
+            </p>
+            <p className="text-2xl font-black text-slate-800 mt-1">
+              {masterPlan.totalNights}
+            </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6">
           {masterPlan.routes.map((route) => (
-            <div key={route.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+            <div
+              key={route.id}
+              className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+            >
               <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50">
                 <div className="flex items-center gap-3">
-                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: route.color }}></div>
-                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">{route.name}</h4>
-                  <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">{route.points.length} puntos</span>
+                  <div
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: route.color }}
+                  ></div>
+                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                    {route.name}
+                  </h4>
+                  <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">
+                    {route.points.length} puntos
+                  </span>
                 </div>
                 <div className="flex gap-4 text-xs font-mono font-bold text-slate-600 mt-2 md:mt-0">
-                  <span><i className="fa-solid fa-road mr-1"></i>{route.distance}km</span>
-                  <span className={route.days > MAX_ROUTE_DAYS ? "text-red-500 font-black animate-pulse" : ""}><i className="fa-solid fa-calendar-day mr-1"></i>{route.days}d</span>
-                  <span><i className="fa-solid fa-moon mr-1"></i>{route.nights}n</span>
-                  <span className="text-sunass-blue"><i className="fa-solid fa-sack-dollar mr-1"></i>S/. {route.totalCost.toFixed(2)}</span>
+                  <span>
+                    <i className="fa-solid fa-road mr-1"></i>
+                    {route.distance}km
+                  </span>
+                  <span
+                    className={
+                      route.days > MAX_ROUTE_DAYS
+                        ? "text-red-500 font-black animate-pulse"
+                        : ""
+                    }
+                  >
+                    <i className="fa-solid fa-calendar-day mr-1"></i>
+                    {route.days}d
+                  </span>
+                  <span>
+                    <i className="fa-solid fa-moon mr-1"></i>
+                    {route.nights}n
+                  </span>
+                  <span className="text-sunass-blue">
+                    <i className="fa-solid fa-sack-dollar mr-1"></i>S/.{" "}
+                    {route.totalCost.toFixed(2)}
+                  </span>
                 </div>
               </div>
 
@@ -563,7 +768,9 @@ export default function App() {
                   <thead className="bg-white text-slate-400 uppercase font-bold text-[9px] tracking-widest border-b border-slate-100">
                     <tr>
                       <th className="px-6 py-2 text-center">Día</th>
-                      <th className="px-6 py-2 text-left">Itinerario Detallado</th>
+                      <th className="px-6 py-2 text-left">
+                        Itinerario Detallado
+                      </th>
                       <th className="px-6 py-2 text-center">Tiempos</th>
                       <th className="px-6 py-2 text-right">Notas</th>
                     </tr>
@@ -571,10 +778,14 @@ export default function App() {
                   <tbody className="divide-y divide-slate-50">
                     {route.logs.map((log, idx) => (
                       <tr key={idx} className="hover:bg-slate-50">
-                        <td className="px-6 py-3 text-center font-black text-slate-700">Día {log.day}</td>
+                        <td className="px-6 py-3 text-center font-black text-slate-700">
+                          Día {log.day}
+                        </td>
                         <td className="px-6 py-3">
                           <div className="flex flex-wrap gap-2 items-center">
-                            <span className="text-slate-500">{log.start_location}</span>
+                            <span className="text-slate-500">
+                              {log.start_location}
+                            </span>
                             <i className="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>
                             {log.activity_points.map((p, i) => {
                               const pt = route.points.find((x) => x.name === p);
@@ -582,11 +793,19 @@ export default function App() {
                               const ocCount = log.activity_oc_counts[p] || 0;
                               return (
                                 <React.Fragment key={i}>
-                                  <span className={`font-bold ${isOC ? "text-purple-600 bg-purple-50" : "text-sunass-blue bg-blue-50"} px-2 py-0.5 rounded flex items-center gap-1`}>
+                                  <span
+                                    className={`font-bold ${isOC ? "text-purple-600 bg-purple-50" : "text-sunass-blue bg-blue-50"} px-2 py-0.5 rounded flex items-center gap-1`}
+                                  >
                                     {p}
-                                    {ocCount > 0 && <span className="text-[9px] bg-purple-600 text-white px-1 rounded">+{ocCount}</span>}
+                                    {ocCount > 0 && (
+                                      <span className="text-[9px] bg-purple-600 text-white px-1 rounded">
+                                        +{ocCount}
+                                      </span>
+                                    )}
                                   </span>
-                                  {i < log.activity_points.length - 1 && <i className="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>}
+                                  {i < log.activity_points.length - 1 && (
+                                    <i className="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>
+                                  )}
                                 </React.Fragment>
                               );
                             })}
@@ -594,7 +813,8 @@ export default function App() {
                               <>
                                 <i className="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>
                                 <span className="font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1">
-                                  ODS <i className="fa-solid fa-flag-checkered text-[10px]"></i>
+                                  ODS{" "}
+                                  <i className="fa-solid fa-flag-checkered text-[10px]"></i>
                                 </span>
                               </>
                             )}
@@ -602,12 +822,22 @@ export default function App() {
                         </td>
                         <td className="px-6 py-3 text-center">
                           <div className="flex flex-col items-center gap-1 font-mono text-[10px]">
-                            <span className="text-slate-500">🚗 {log.travel_minutes}m</span>
-                            <span className="text-slate-500">🛠️ {log.work_minutes}m</span>
-                            {log.overtime_minutes > 0 && <span className="text-red-500 font-black">⏱️ +{log.overtime_minutes}m</span>}
+                            <span className="text-slate-500">
+                              🚗 {log.travel_minutes}m
+                            </span>
+                            <span className="text-slate-500">
+                              🛠️ {log.work_minutes}m
+                            </span>
+                            {log.overtime_minutes > 0 && (
+                              <span className="text-red-500 font-black">
+                                ⏱️ +{log.overtime_minutes}m
+                              </span>
+                            )}
                           </div>
                         </td>
-                        <td className="px-6 py-3 text-right text-[10px] text-slate-400 italic max-w-[250px]">{log.note || "-"}</td>
+                        <td className="px-6 py-3 text-right text-[10px] text-slate-400 italic max-w-[250px]">
+                          {log.note || "-"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -620,220 +850,362 @@ export default function App() {
     );
   };
 
-  // --- UI principal (layout optimizado: header + (mapa/panel) + resultados) ---
   return (
-  <div className="h-screen w-full bg-slate-100 overflow-hidden">
-    <div className="h-full grid grid-rows-[72px_520px_1fr] gap-4 p-4 max-w-[1920px] mx-auto">
-
-      {/* HEADER: Identidad y Acciones Globales */}
-      <header className="bg-white rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between px-6">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-sunass-blue rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
-            <i className="fa-solid fa-route text-lg"></i>
-          </div>
+    <div className="min-h-screen w-full bg-slate-100 font-sans">
+      <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
+        {/* HEADER */}
+        <header className="bg-white rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between px-8 py-6 gap-4">
           <div>
-            <h1 className="text-lg font-black text-slate-800 tracking-tight leading-none">Planificador de Rutas ODS</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Ingeniería de Software • Laleska Arroyo</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-2 mr-4">
-            <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
-              matrixLocations.length ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-slate-50 text-slate-400 border-slate-100"
-            }`}>
-              {matrixLocations.length ? `● Matriz: ${matrixLocations.length} pts` : "○ Matriz pendiente"}
-            </span>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-none">
+              Planificador de Rutas ODS
+            </h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">
+              Cálculo de rutas óptimas - Laleska Arroyo (IS)
+            </p>
           </div>
 
-          <button
-            onClick={handleResetPoints}
-            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
-          >
-            <i className="fa-solid fa-trash-can"></i> Limpiar
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* INDICADOR DE COBERTURA (Recuperado) */}
+            <div className="bg-slate-50 px-6 py-2 rounded-2xl border border-slate-100 text-center mr-4">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">
+                Cobertura de Puntos
+              </p>
+              <p className="text-lg font-black text-sunass-blue">
+                {locations.filter((l) => l.isActive).length}{" "}
+                <span className="text-slate-300">/</span> {locations.length}
+              </p>
+            </div>
 
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2"
-          >
-            <i className="fa-solid fa-file-excel"></i> Importar Excel
-          </button>
-          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileUpload} />
-        </div>
-      </header>
+            <button
+              onClick={handleResetPoints}
+              className="px-6 py-3 rounded-2xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 text-[10px] font-black uppercase tracking-widest transition-all"
+            >
+              <i className="fa-solid fa-trash-can mr-2"></i> Limpiar
+            </button>
 
-      {/* ROW 2: ENTORNO DE TRABAJO (MAPA + CONFIG) */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_450px] gap-4 min-h-0">
-        
-        {/* MAPA */}
-        <section className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden relative min-h-0 group">
-          <MapContainer
-            ref={mapRef}
-            center={[-12.0464, -77.0428]}
-            zoom={6}
-            style={{ height: "100%", width: "100%" }}
-          >
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            <MapClickHandler onClick={handleMapClick} />
-            <MapSearchControl />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2"
+            >
+              <i className="fa-solid fa-file-excel"></i> Importar Excel
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </div>
+        </header>
 
-            {locations.map((loc, idx) => (
-              <Marker key={loc.id} position={[loc.lat, loc.lng]} icon={createCustomIcon(idx + 1, "#005596", loc.isActive)}>
-                <Popup>
-                  <div className="p-1 min-w-[180px]">
-                    <p className="font-black text-slate-800 text-sm">{loc.name}</p>
-                    <p className="text-[10px] text-slate-400 font-mono mb-2">{loc.coords}</p>
-                    <div className="flex justify-between text-[10px] mb-3 bg-slate-50 p-2 rounded-lg">
-                      <span>Categoría: <b>{loc.category}</b></span>
-                      <span>OCs: <b>{loc.ocCount}</b></span>
+        {/* CUERPO PRINCIPAL: MAPA + CONFIGURACIÓN COMPLETA */}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* MAPA */}
+          <section className="flex-1 bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden relative h-[650px]">
+            <MapContainer
+              ref={mapRef}
+              center={[-12.0464, -77.0428]}
+              zoom={6}
+              style={{ height: "100%", width: "100%" }}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <MapClickHandler onClick={handleMapClick} />
+              <MapSearchControl />
+              {locations.map((loc, idx) => (
+                <Marker
+                  key={loc.id}
+                  position={[loc.lat, loc.lng]}
+                  icon={createCustomIcon(idx + 1, "#005596", loc.isActive)}
+                >
+                  <Popup>
+                    <div className="p-1 font-sans">
+                      <p className="font-black text-slate-800">{loc.name}</p>
+                      <p className="text-[10px] text-slate-400 mb-2">
+                        {loc.category} | Ubigeo: {loc.ubigeo}
+                      </p>
+                      <button
+                        onClick={() => handleToggleActive(loc.id)}
+                        className={`w-full py-2 rounded-lg text-[9px] font-black uppercase ${loc.isActive ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}
+                      >
+                        {loc.isActive ? "Desactivar Punto" : "Activar Punto"}
+                      </button>
                     </div>
-                    
-                    {loc.category === "PC" && (
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="text-[9px] font-black uppercase text-slate-400">Actividades OC</span>
-                        <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-                          <button onClick={(e) => { e.stopPropagation(); handleOcChange(loc.id, false); }} className="w-6 h-6 rounded-md hover:bg-white text-slate-600 transition-all">-</button>
-                          <span className="w-6 text-center font-bold text-xs">{loc.ocCount}</span>
-                          <button onClick={(e) => { e.stopPropagation(); handleOcChange(loc.id, true); }} className="w-6 h-6 rounded-md hover:bg-white text-slate-600 transition-all">+</button>
-                        </div>
-                      </div>
-                    )}
+                  </Popup>
+                </Marker>
+              ))}
+              {masterPlan?.routes?.map((route) => (
+                <Polyline
+                  key={route.id}
+                  pathOptions={{ color: route.color, weight: 4, opacity: 0.8 }}
+                  positions={route.points.map((p) => [p.lat, p.lng]) as any}
+                />
+              ))}
+            </MapContainer>
+          </section>
 
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleToggleActive(loc.id); }}
-                      className={`w-full py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${
-                        loc.isActive ? "bg-slate-100 text-slate-600 hover:bg-red-50 hover:text-red-600" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
-                      }`}
-                    >
-                      {loc.isActive ? "Excluir del cálculo" : "Incluir en cálculo"}
-                    </button>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+          {/* 2. PANEL LATERAL DE CONFIGURACIÓN EDITABLE */}
+          <aside className="w-full lg:w-[450px] space-y-6">
+            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl p-8 space-y-6">
+              {/* SECCIÓN UNIFICADA DE PARÁMETROS */}
+              <div className="space-y-6">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3 flex justify-between items-center">
+                  Configuración del Sistema
+                  <span className="text-sunass-blue">V2.0</span>
+                </h3>
 
-            {masterPlan?.routes?.map((route) => (
-              <Polyline key={route.id} pathOptions={{ color: route.color, weight: 4, opacity: 0.8 }} positions={route.points.map(p => [p.lat, p.lng]) as any} />
-            ))}
-          </MapContainer>
-        </section>
-
-        {/* PANEL DE CONTROL */}
-        <aside className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden flex flex-col min-h-0">
-          <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
-            
-            {/* Configuración de Origen */}
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-2">Configuración Base</h3>
-              <div className="grid grid-cols-1 gap-4">
-                <div className="relative">
-                  <label className="text-[9px] font-black text-slate-500 uppercase absolute -top-2 left-3 bg-white px-1">Coordenadas ODS</label>
+                {/* Input de Coordenadas Integrado */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">
+                    <i className="fa-solid fa-location-crosshairs mr-1"></i>{" "}
+                    Punto de Origen (Lat, Lng)
+                  </label>
                   <input
+                    type="text"
                     value={odsInput}
                     onChange={(e) => setOdsInput(e.target.value)}
                     placeholder="-12.0464, -77.0428"
-                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl text-xs font-bold focus:border-sunass-blue outline-none transition-all"
+                    className="w-full bg-transparent text-sm font-bold text-slate-700 outline-none focus:text-sunass-blue transition-colors"
                   />
                 </div>
-                
-                <div className="flex p-1 bg-slate-100 rounded-xl">
-                  {['matrix', 'optimization'].map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setViewMode(m as any)}
-                      className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
-                        viewMode === m ? "bg-white text-sunass-blue shadow-sm" : "text-slate-500 hover:text-slate-700"
-                      }`}
-                    >
-                      {m === 'matrix' ? 'Matriz OSRM' : 'Optimización'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
 
-            {/* Costos y Factores */}
-            <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-2">Parámetros Económicos</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: "Costo KM", val: costs.km, key: "km", sym: "S/." },
-                  { label: "F. Tiempo", val: timeFactor, key: "time", sym: "x" },
-                  { label: "Alimentación", val: costs.food, key: "food", sym: "S/." },
-                  { label: "Alojamiento", val: costs.hotel, key: "hotel", sym: "S/." }
-                ].map((item) => (
-                  <div key={item.label} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">{item.label}</label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-slate-300">{item.sym}</span>
-                      <input
-                        type="number"
-                        value={item.val}
-                        onChange={(e) => item.key === "time" ? setTimeFactor(parseFloat(e.target.value)) : setCosts({ ...costs, [item.key]: parseFloat(e.target.value) })}
-                        className="w-full bg-transparent text-xs font-black text-slate-700 outline-none"
-                      />
+                {/* Configuración de Tiempos */}
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
+                      Categoría PC
+                    </label>
+                    <div className="flex gap-1">
+                      {[3, 4, 4.5].map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setPcDuration(t)}
+                          className={`flex-1 py-2 rounded-xl text-[10px] font-black border-2 transition-all ${pcDuration === t ? "border-sunass-blue bg-blue-50 text-sunass-blue" : "border-slate-50 text-slate-300"}`}
+                        >
+                          {t}h
+                        </button>
+                      ))}
                     </div>
                   </div>
-                ))}
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
+                      Categoría OC
+                    </label>
+                    <div className="flex gap-1">
+                      {[3, 4].map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setOcDuration(t)}
+                          className={`flex-1 py-2 rounded-xl text-[10px] font-black border-2 transition-all ${ocDuration === t ? "border-sunass-blue bg-blue-50 text-sunass-blue" : "border-slate-50 text-slate-300"}`}
+                        >
+                          {t}h
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Costos y Factores (Grid más compacto) */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 relative">
+                    <span className="absolute top-2 right-3 text-[8px] font-black text-slate-300 uppercase">
+                      Km
+                    </span>
+                    <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">
+                      S/. Costo
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={costs.km}
+                      onChange={(e) =>
+                        setCosts({
+                          ...costs,
+                          km: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-transparent text-sm font-black text-slate-700 outline-none"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 relative">
+                    <span className="absolute top-2 right-3 text-[8px] font-black text-slate-300 uppercase">
+                      Factor
+                    </span>
+                    <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">
+                      F. Tiempo
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={timeFactor}
+                      onChange={(e) =>
+                        setTimeFactor(parseFloat(e.target.value) || 0)
+                      }
+                      className="w-full bg-transparent text-sm font-black text-slate-700 outline-none"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">
+                      S/. Alim.
+                    </label>
+                    <input
+                      type="number"
+                      value={costs.food}
+                      onChange={(e) =>
+                        setCosts({
+                          ...costs,
+                          food: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-transparent text-sm font-black text-slate-700 outline-none"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <label className="block text-[8px] font-black text-slate-400 uppercase mb-1">
+                      S/. Hotel
+                    </label>
+                    <input
+                      type="number"
+                      value={costs.hotel}
+                      onChange={(e) =>
+                        setCosts({
+                          ...costs,
+                          hotel: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-transparent text-sm font-black text-slate-700 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* BOTONES DE ACCIÓN */}
+              <div className="pt-4 space-y-3">
+                <div className="flex p-1 bg-slate-100 rounded-2xl">
+                  <button
+                    onClick={() => setViewMode("matrix")}
+                    className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${viewMode === "matrix" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500"}`}
+                  >
+                    Matriz
+                  </button>
+                  <button
+                    onClick={() => setViewMode("optimization")}
+                    className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${viewMode === "optimization" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500"}`}
+                  >
+                    Plan Maestro
+                  </button>
+                </div>
+
+                <button
+                  onClick={
+                    viewMode === "matrix"
+                      ? runMatrixCalculation
+                      : runMasterPlanOptimization
+                  }
+                  disabled={
+                    isProcessing || isOptimizing || locations.length === 0
+                  }
+                  className="w-full py-4 rounded-2xl bg-sunass-blue hover:bg-blue-700 text-white font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-blue-100 transition-all disabled:bg-slate-200"
+                >
+                  {isProcessing || isOptimizing
+                    ? "Procesando..."
+                    : viewMode === "matrix"
+                      ? "Calcular Matriz"
+                      : "Generar Plan"}
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        {/* SECCIÓN DE RESULTADOS: Crece dinámicamente hacia abajo */}
+        <section className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden min-h-[600px]">
+          {/* TABS DE RESULTADOS (Recuperado: Km Distancia / Min Tiempo) */}
+          <div className="px-10 py-8 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 bg-slate-50/50">
+            <div className="flex items-center gap-5">
+              <div className="w-14 h-14 bg-sunass-blue rounded-2xl shadow-lg flex items-center justify-center text-white">
+                <i
+                  className={`fa-solid ${viewMode === "matrix" ? "fa-table-cells" : "fa-file-invoice-dollar"} text-xl`}
+                ></i>
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">
+                  {viewMode === "matrix"
+                    ? "Matriz de Distancias y Tiempos"
+                    : "Informe de Optimización Logística"}
+                </h2>
+                <div className="flex gap-4 mt-1">
+                  {viewMode === "matrix" && (
+                    <>
+                      <button
+                        onClick={() => setActiveTab("distance")}
+                        className={`text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "distance" ? "text-sunass-blue border-b-2 border-sunass-blue" : "text-slate-400"}`}
+                      >
+                        Km Distancia
+                      </button>
+                      <button
+                        onClick={() => setActiveTab("time")}
+                        className={`text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "time" ? "text-sunass-blue border-b-2 border-sunass-blue" : "text-slate-400"}`}
+                      >
+                        Min Tiempo
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Botonera Principal */}
-            <div className="pt-2 space-y-3">
-              <button
-                onClick={viewMode === "matrix" ? runMatrixCalculation : runMasterPlanOptimization}
-                disabled={isProcessing || isOptimizing || !odsInput || locations.length === 0}
-                className="w-full py-4 rounded-2xl bg-sunass-blue text-white font-black text-xs uppercase tracking-[0.15em] transition-all hover:bg-sunass-dark hover:shadow-lg disabled:bg-slate-200 disabled:text-slate-400 flex items-center justify-center gap-3 shadow-xl shadow-blue-100"
-              >
-                {isProcessing || isOptimizing ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-bolt"></i>}
-                {viewMode === "matrix" ? "Calcular Matriz de Distancias" : "Generar Plan Maestro"}
-              </button>
-
-              <button
-                onClick={stopProcessing}
-                className="w-full py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-widest transition-all"
-              >
-                Detener Proceso
-              </button>
-            </div>
-
-            {/* Consola de Logs */}
-            <div className="bg-slate-900 rounded-2xl p-4 h-32 overflow-y-auto font-mono text-[9px] text-emerald-400 shadow-inner border border-slate-800 custom-scrollbar-dark">
-              {logs.length === 0 && <span className="opacity-40">Esperando acciones...</span>}
-              {logs.map((l, i) => (
-                <div key={i} className="mb-1 leading-tight flex gap-2">
-                  <span className="text-slate-600">[{logs.length - i}]</span>
-                  <span>{l}</span>
-                </div>
-              ))}
-            </div>
+            {viewMode === "optimization" && masterPlan && (
+              <div className="flex gap-4">
+                <button
+                  onClick={() =>
+                    downloadMasterPDF({
+                      masterPlan,
+                      matrixLocations,
+                      distanceMatrix,
+                      costs,
+                      pcDuration,
+                      ocDuration,
+                    })
+                  }
+                  className="px-8 py-3 bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+                >
+                  PDF
+                </button>
+                <button
+                  onClick={() =>
+                    downloadMasterCSV({
+                      masterPlan,
+                      matrixLocations,
+                      distanceMatrix,
+                      costs,
+                      pcDuration,
+                      ocDuration,
+                    })
+                  }
+                  className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+                >
+                  Excel
+                </button>
+              </div>
+            )}
           </div>
-        </aside>
-      </div>
 
-      {/* ROW 3: DATOS Y RESULTADOS (TABLAS) */}
-      <footer className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden min-h-0 flex flex-col">
-        <div className="flex-1 overflow-auto custom-scrollbar">
-
-          {/* VISTA MATRIZ */}
-          {viewMode === "matrix" && matrixLocations.length > 0 ? (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 h-full flex flex-col">
-              <div className="p-4 bg-slate-50 border-b flex justify-between items-center sticky top-0 z-20">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Matriz de Costeo {activeTab === 'distance' ? '(Kilómetros)' : '(Minutos)'}</span>
-                <div className="flex gap-2">
-                  <button onClick={() => setActiveTab("distance")} className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${activeTab === 'distance' ? "bg-sunass-blue text-white shadow-md" : "bg-white text-slate-400 border border-slate-200"}`}>Km</button>
-                  <button onClick={() => setActiveTab("time")} className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${activeTab === 'time' ? "bg-sunass-blue text-white shadow-md" : "bg-white text-slate-400 border border-slate-200"}`}>Min</button>
-                </div>
-              </div>
-              
-              <div className="overflow-auto flex-1">
-                <table className="w-full text-[11px] border-separate border-spacing-0">
-                  <thead className="sticky top-0 z-10">
-                    <tr>
-                      <th className="p-4 bg-slate-100 border-b border-r border-slate-200 text-slate-500 font-black text-left sticky left-0 z-30 uppercase text-[9px]">Punto Origen / Destino</th>
+          {/* CONTENIDO DE RESULTADOS */}
+          <div className="p-10">
+            {viewMode === "matrix" && matrixLocations.length > 0 ? (
+              <div className="overflow-x-auto rounded-[2rem] border border-slate-200 shadow-sm">
+                <table className="w-full text-[11px] border-collapse bg-white">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="p-5 text-left font-black text-slate-400 uppercase tracking-widest border-b sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
+                        Punto Referencia
+                      </th>
                       {matrixLocations.map((l) => (
-                        <th key={l.id} className={`p-4 border-b border-slate-200 min-w-[110px] text-center font-black uppercase text-[9px] ${l.id === -1 ? "bg-blue-50 text-blue-600" : "bg-slate-50 text-slate-600"}`}>
+                        <th
+                          key={l.id}
+                          className="p-5 text-center font-bold text-slate-700 border-b min-w-[130px] uppercase tracking-tighter"
+                        >
                           {l.name}
                         </th>
                       ))}
@@ -841,68 +1213,54 @@ export default function App() {
                   </thead>
                   <tbody>
                     {matrixLocations.map((rl, i) => (
-                      <tr key={rl.id} className="hover:bg-blue-50/30 transition-colors group">
-                        <td className={`p-3 border-b border-r border-slate-100 sticky left-0 z-10 font-black uppercase text-[9px] transition-colors ${rl.id === -1 ? "bg-blue-50 text-blue-600" : "bg-white group-hover:bg-blue-50 text-slate-500"}`}>
+                      <tr
+                        key={rl.id}
+                        className="hover:bg-blue-50/40 transition-all group"
+                      >
+                        <td className="p-5 font-black text-slate-800 uppercase text-[10px] border-b sticky left-0 bg-white z-10 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)] group-hover:bg-blue-50 transition-all">
                           {rl.name}
                         </td>
-                        {matrixLocations.map((_, j) => {
-                          const cellData = activeTab === "distance" ? distanceMatrix[i]?.[j] : timeMatrix[i]?.[j];
-                          return (
-                            <td key={j} className={`p-3 border-b border-slate-100 text-center font-mono text-[10px] ${i === j ? "bg-slate-50/50 text-slate-200" : "text-slate-600"}`}>
-                              {i === j ? "—" : cellData?.value || "..."}
-                            </td>
-                          );
-                        })}
+                        {matrixLocations.map((_, j) => (
+                          <td
+                            key={j}
+                            className="p-5 text-center font-mono text-slate-600 border-b"
+                          >
+                            {i === j ? (
+                              <span className="text-slate-200">--</span>
+                            ) : (
+                              (activeTab === "distance"
+                                ? distanceMatrix[i]?.[j]?.value
+                                : timeMatrix[i]?.[j]?.value) || "..."
+                            )}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
-          ) : viewMode === "matrix" && (
-            <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4 opacity-60">
-              <i className="fa-solid fa-table-cells text-5xl"></i>
-              <p className="font-black uppercase text-xs tracking-[0.2em]">Matriz no calculada</p>
-            </div>
-          )}
-
-          {/* VISTA PLAN MAESTRO */}
-          {viewMode === "optimization" && masterPlan ? (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-slate-50 p-6 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6 sticky top-0 z-10">
-                <div className="flex items-center gap-4">
-                  <div className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-[10px] font-black uppercase">Resultados Óptimos</div>
-                  <h3 className="font-black text-slate-700 text-sm uppercase tracking-tight">Informe Plan Maestro (100% Cobertura)</h3>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => downloadMasterPDF({ masterPlan, matrixLocations, distanceMatrix, costs, pcDuration, ocDuration })}
-                    className="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center gap-2"
-                  >
-                    <i className="fa-solid fa-file-pdf"></i> Exportar PDF
-                  </button>
-                  <button
-                    onClick={() => downloadMasterCSV({ masterPlan, matrixLocations, distanceMatrix, costs, pcDuration, ocDuration })}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center gap-2"
-                  >
-                    <i className="fa-solid fa-file-csv"></i> Exportar CSV
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-8 bg-slate-50/30">
+            ) : viewMode === "optimization" && masterPlan ? (
+              <div className="animate-in fade-in duration-700">
                 {renderMasterPlan()}
               </div>
-            </div>
-          ) : viewMode === "optimization" && (
-            <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4 opacity-60">
-              <i className="fa-solid fa-wand-magic-sparkles text-5xl"></i>
-              <p className="font-black uppercase text-xs tracking-[0.2em]">Plan Maestro pendiente de generación</p>
-            </div>
-          )}
-        </div>
-      </footer>
+            ) : (
+              <div className="py-32 text-center">
+                <i className="fa-solid fa-layer-group text-6xl text-slate-100 mb-4 block"></i>
+                <p className="text-slate-300 font-black uppercase tracking-[0.3em] text-xs">
+                  Sin datos para mostrar
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <footer className="py-20 text-center">
+          <div className="h-px bg-slate-200 w-24 mx-auto mb-8"></div>
+          <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">
+            Laleska Arroyo • Sistema de Gestión ODS 2026
+          </p>
+        </footer>
+      </div>
     </div>
-  </div>
-);
+  );
 }
