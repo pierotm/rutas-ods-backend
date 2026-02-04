@@ -6,12 +6,16 @@ import pe.gob.sunass.rutasods.matrix.application.internal.MatrixService;
 import pe.gob.sunass.rutasods.optimization.domain.services.GreedyRoutePlanner;
 import pe.gob.sunass.rutasods.optimization.domain.services.ItineraryCalculator;
 import pe.gob.sunass.rutasods.optimization.domain.services.DistanceEvaluator;
+import pe.gob.sunass.rutasods.optimization.infrastructure.cache.OptimizationCacheService;
+import pe.gob.sunass.rutasods.optimization.infrastructure.cache.OptimizationSnapshot;
 import pe.gob.sunass.rutasods.optimization.interfaces.rest.dto.*;
 import pe.gob.sunass.rutasods.shared.domain.model.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
+import java.time.Instant;
+import java.util.UUID;
 
 import java.util.Arrays;
 
@@ -20,9 +24,11 @@ import java.util.Arrays;
 public class RunMasterPlanUseCase {
 
     private final MatrixService matrixService;
+    private final OptimizationCacheService cacheService;
 
-    public RunMasterPlanUseCase(MatrixService matrixService) {
+    public RunMasterPlanUseCase(MatrixService matrixService, OptimizationCacheService cacheService) {
         this.matrixService = matrixService;
+        this.cacheService = cacheService;
     }
 
     public OptimizeResponse execute(OptimizeRequest request) {
@@ -152,9 +158,51 @@ public class RunMasterPlanUseCase {
                         .mapToInt(RouteSegment::getDays)
                         .sum();
 
+        // 8-A) guardar snapshot en cache
+
+        String sessionId = UUID.randomUUID().toString();
+
+        OptimizationSnapshot snapshot =
+                new OptimizationSnapshot(
+                        routes,
+                        distances,
+                        durations,
+
+                        allPoints.stream()
+                                .map(Location::getName)
+                                .toList(),
+
+                        request.getCosts() != null
+                                ? request.getCosts().km
+                                : 1.0,
+
+                        request.getCosts() != null
+                                ? request.getCosts().food
+                                : 180,
+
+                        request.getCosts() != null
+                                ? request.getCosts().hotel
+                                : 570,
+
+                        request.getPcDuration() != null
+                                ? request.getPcDuration()
+                                : 180,
+
+                        request.getOcDuration() != null
+                                ? request.getOcDuration()
+                                : 180,
+
+                        Instant.now()
+                );
+
+        cacheService.save(sessionId, snapshot);
+
         // 8) mapear response
         OptimizeResponse response =
                 new OptimizeResponse();
+
+
+        response.setSessionId(sessionId);
 
         response.setRoutes(
                 routes.stream()

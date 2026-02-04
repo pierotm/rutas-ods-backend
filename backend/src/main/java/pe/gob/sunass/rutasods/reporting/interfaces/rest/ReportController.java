@@ -6,7 +6,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pe.gob.sunass.rutasods.reporting.application.internal.GenerateExcelUseCase;
-import pe.gob.sunass.rutasods.reporting.interfaces.rest.dto.MasterPlanReportRequest;
 
 @RestController
 @RequestMapping("/reports")
@@ -15,21 +14,13 @@ public class ReportController {
 
     private final GenerateExcelUseCase generateExcelUseCase;
 
-    @PostMapping("/plan-maestro/excel")
+    @GetMapping("/plan-maestro/excel/{sessionId}")
     public ResponseEntity<byte[]> downloadExcel(
-            @RequestBody MasterPlanReportRequest request
+            @PathVariable String sessionId
     ) {
 
-        byte[] file = generateExcelUseCase.generate(
-                request.getRoutes(),
-                request.getDistanceMatrix(),
-                request.getMatrixNames(),
-                request.getKmCost(),
-                request.getFoodCost(),
-                request.getHotelCost(),
-                request.getPcDuration(),
-                request.getOcDuration()
-        );
+        byte[] file =
+                generateExcelUseCase.generate(sessionId);
 
         return ResponseEntity.ok()
                 .header(
@@ -40,4 +31,3 @@ public class ReportController {
                 .body(file);
     }
 }
-
