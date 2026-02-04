@@ -18,5 +18,7 @@ public class OptimizeResponse {
 
     private int pointsCovered;
 
+    private String sessionId;
+
     // getters/setters
 }
