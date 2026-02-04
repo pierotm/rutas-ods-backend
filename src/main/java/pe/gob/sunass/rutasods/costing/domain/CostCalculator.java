@@ -25,7 +25,7 @@ public class CostCalculator {
                 .mapToDouble(p -> p.getOcCount() * CostRules.OC_UNIT_COST)
                 .sum();
 
-        return gas + food + hotel + oc;
+        return gas + food + hotel; //+ oc
     }
 
     public CostBreakdown breakdown(
