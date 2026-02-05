@@ -13,16 +13,14 @@ declare const XLSX: any;
 import type { Location, Matrix, MasterPlanResult } from "./domain/types";
 import { ROUTE_COLORS, MAX_ROUTE_DAYS, OC_UNIT_COST } from "./config/constants";
 import { parseCoords } from "./utils/coords";
-import { getCombinations, getPermutations } from "./utils/combinatorics";
-import { calculateItinerary } from "./domain/itinerary";
 import { fetchOSRMTable } from "./services/osrm";
-import { downloadMasterCSV, downloadMasterPDF } from "./services/export";
 
 import MapClickHandler from "./ui/components/MapClickHandler";
 import MapSearchControl from "./ui/components/MapSearchControl";
 import { createCustomIcon } from "./ui/components/icons";
 
-const isValidConnection = (_a: Location, _b: Location): boolean => true;
+// 🔥 IMPORTAR SERVICIO DEL BACKEND
+import { optimizeWithBackend, downloadExcelReport } from "./services/backendApi";
 
 export default function App() {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -52,12 +50,16 @@ export default function App() {
 
   const mapRef = useRef<L.Map | null>(null);
 
+  // 🔥 SESSION ID DEL BACKEND
+  const [sessionId, setSessionId] = useState<string>("");
+
   const resetMatrices = () => {
     setDistanceMatrix([]);
     setTimeMatrix([]);
     setRawTimeMatrix([]);
     setMatrixLocations([]);
     setMasterPlan(null);
+    setSessionId("");
   };
 
   const handleMapClick = (latlng: L.LatLng) => {
@@ -229,7 +231,6 @@ export default function App() {
     }
   }, [timeFactor, rawTimeMatrix]);
 
-  // Evita glitches Leaflet al cambiar layout / resultados
   useEffect(() => {
     const t = setTimeout(() => mapRef.current?.invalidateSize(), 120);
     return () => clearTimeout(t);
@@ -280,6 +281,7 @@ export default function App() {
     }
   };
 
+  // 🔥 FUNCIÓN ACTUALIZADA PARA USAR EL BACKEND
   const runMasterPlanOptimization = async () => {
     if (locations.length === 0) return alert("Agrega puntos.");
     const ods = parseCoords(odsInput);
@@ -294,345 +296,115 @@ export default function App() {
 
     const enabledLocations = locations.filter((l) => l.isActive);
     setLogs((prev) => [
-      `🚀 Planificando ruta (Grafo Restringido) para ${Math.min(coverageLimit, enabledLocations.length)} de ${enabledLocations.length} activos...`,
+      `🚀 Enviando ${Math.min(coverageLimit, enabledLocations.length)} puntos al backend...`,
+      `⏳ Este proceso puede tomar varios minutos dependiendo de la cantidad de puntos.`,
       ...prev,
     ]);
 
     try {
-      const odsLoc: Location = {
-        id: -1,
-        name: "ODS (Base)",
-        coords: odsInput,
-        lat: ods.lat,
-        lng: ods.lng,
-        ocCount: 0,
-        category: "PC",
-        ubigeo: "ODS-MAIN",
-        isActive: true,
-      };
-      const activeLocations = enabledLocations.slice(0, coverageLimit);
-      const allOptimizationPoints = [odsLoc, ...activeLocations];
-
-      let distances: number[][];
-      let durations: number[][];
-
-      const fullMatrixAvailable =
-        matrixLocations.length > 0 &&
-        distanceMatrix.length > 0 &&
-        rawTimeMatrix.length > 0;
-
-      if (fullMatrixAvailable) {
-        const subDist: number[][] = [];
-        const subDur: number[][] = [];
-        const indexMap: number[] = [];
-        let mappingSuccess = true;
-
-        for (const pt of allOptimizationPoints) {
-          const idx = matrixLocations.findIndex((m) => m.coords === pt.coords);
-          if (idx === -1) {
-            mappingSuccess = false;
-            break;
-          }
-          indexMap.push(idx);
-        }
-
-        if (mappingSuccess) {
-          setLogs((prev) => [
-            "⚡ Reutilizando Matriz existente (Sub-conjunto)...",
-            ...prev,
-          ]);
-          const distMatVals = distanceMatrix.map((row) =>
-            row.map((c) => c.value),
-          );
-
-          for (let i = 0; i < allOptimizationPoints.length; i++) {
-            const rowD: number[] = [];
-            const rowT: number[] = [];
-            for (let j = 0; j < allOptimizationPoints.length; j++) {
-              rowD.push(distMatVals[indexMap[i]][indexMap[j]]);
-              rowT.push(rawTimeMatrix[indexMap[i]][indexMap[j]]);
-            }
-            subDist.push(rowD);
-            subDur.push(rowT);
-          }
-          distances = subDist;
-          durations = subDur;
-        } else {
-          setLogs((prev) => [
-            "⚠️ Matriz incompleta, descargando nuevos datos...",
-            ...prev,
-          ]);
-          const res = await fetchOSRMTable(
-            allOptimizationPoints,
-            allOptimizationPoints,
-            ctrl.signal,
-          );
-          distances = res.distances;
-          durations = res.durations;
-        }
-      } else {
-        const res = await fetchOSRMTable(
-          allOptimizationPoints,
-          allOptimizationPoints,
-          ctrl.signal,
-        );
-        distances = res.distances;
-        durations = res.durations;
-      }
-
-      setDistanceMatrix(
-        distances.map((row) => row.map((v) => ({ value: v, loading: false }))),
-      );
-      setRawTimeMatrix(durations);
-      setMatrixLocations(allOptimizationPoints);
-
-      const factoredDurations = durations.map((row) =>
-        row.map((val) => parseFloat((val * timeFactor).toFixed(1))),
-      );
-
-      const getDist = (i: number, j: number) => {
-        const p1 = allOptimizationPoints[i];
-        const p2 = allOptimizationPoints[j];
-        if (!isValidConnection(p1, p2)) return Infinity;
-        return distances[i][j];
+      // 🔥 PREPARAR DATOS PARA EL BACKEND
+      const payload = {
+        ods: { lat: ods.lat, lng: ods.lng },
+        points: enabledLocations.slice(0, coverageLimit).map((loc) => ({
+          id: loc.id,
+          name: loc.name,
+          lat: loc.lat,
+          lng: loc.lng,
+          ocCount: loc.ocCount,
+          category: loc.category,
+          ubigeo: loc.ubigeo,
+          active: loc.isActive,
+        })),
+        coverageLimit,
+        pcDuration,
+        ocDuration,
+        costs: {
+          km: costs.km,
+          food: costs.food,
+          hotel: costs.hotel,
+        },
+        timeFactor,
       };
 
-      let availableIndices: number[] = activeLocations.map((_, i) => i + 1);
-      const finalRoutes: any[] = [];
-      let routeCounter = 1;
+      console.log("📤 Enviando al backend:", payload);
 
-      const SEARCH_POOL_SIZE = 9;
-      const MAX_COMBO_SIZE = 6;
+      // 🔥 LLAMAR AL BACKEND
+      const response = await optimizeWithBackend(payload, ctrl.signal);
 
-      while (availableIndices.length > 0) {
-        if (ctrl.signal.aborted)
-          throw new DOMException("Aborted", "AbortError");
+      console.log("📥 Respuesta del backend:", response);
 
-        let farthestIdx = -1;
-        let maxDist = -1;
-        for (const idx of availableIndices) {
-          const d = getDist(0, idx);
-          if (d !== Infinity && d > maxDist) {
-            maxDist = d;
-            farthestIdx = idx;
-          }
-        }
-        if (farthestIdx === -1) farthestIdx = availableIndices[0];
+      // 🔥 GUARDAR EL SESSION ID
+      setSessionId(response.sessionId);
 
-        const otherIndices = availableIndices.filter((i) => i !== farthestIdx);
-        otherIndices.sort(
-          (a, b) => getDist(farthestIdx, a) - getDist(farthestIdx, b),
-        );
-        const validNeighbors = otherIndices.filter(
-          (i) => getDist(farthestIdx, i) !== Infinity,
-        );
-        const neighbors = validNeighbors.slice(0, SEARCH_POOL_SIZE);
+      // 🔥 TRANSFORMAR RESPUESTA DEL BACKEND AL FORMATO DEL FRONTEND
+      const transformedRoutes = response.routes.map((route, idx) => {
+        console.log("🔄 Transformando ruta:", route);
 
-        let bestCandidate = {
-          perm: [] as number[],
-          cost: Infinity,
-          metric: Infinity,
-          itin: null as any,
-          breakdown: null as any,
+        return {
+          id: route.id || idx + 1,
+          name: route.name || `Ruta ${idx + 1}`,
+          points: (route.points || []).map((p) => ({
+            id: p.id ?? 0,
+            name: p.name || "",
+            lat: p.lat || 0,
+            lng: p.lng || 0,
+            coords: `${p.lat}, ${p.lng}`,
+            ocCount: p.ocCount || 0,
+            category: (p.category || "PC") as "PC" | "OC",
+            ubigeo: p.ubigeo || "",
+            isActive: p.active ?? true,
+          })),
+          logs: (route.logs || []).map((log) => ({
+            day: log.day || 1,
+            start_location: log.startLocation || log.start_location || "",
+            activity_points: log.activityPoints || log.activity_points || [],
+            activity_oc_counts:
+              log.activityOcCounts || log.activity_oc_counts || {},
+            travel_minutes: log.travelMinutes ?? log.travel_minutes ?? 0,
+            work_minutes: log.workMinutes ?? log.work_minutes ?? 0,
+            overtime_minutes: log.overtimeMinutes ?? log.overtime_minutes ?? 0,
+            total_day_minutes: log.totalDayMinutes ?? log.total_day_minutes ?? 0,
+            final_location: log.finalLocation || log.final_location || "",
+            is_return: log.isReturn ?? log.is_return ?? false,
+            note: log.note || "",
+          })),
+          totalCost: route.totalCost || 0,
+          breakdown: route.breakdown || { gas: 0, food: 0, hotel: 0, oc: 0 },
+          distance: route.distance || 0,
+          nights: route.nights || 0,
+          days: route.days || 0,
+          color: ROUTE_COLORS[idx % ROUTE_COLORS.length],
         };
-
-        const maxNeighborsToAdd = Math.min(
-          neighbors.length,
-          MAX_COMBO_SIZE - 1,
-        );
-
-        for (let k = 0; k <= maxNeighborsToAdd; k++) {
-          const neighborCombos = getCombinations<number>(neighbors, k);
-          for (const combo of neighborCombos) {
-            const clusterIndices = [farthestIdx, ...combo];
-            const perms = getPermutations<number>(clusterIndices);
-
-            let bestPermForCluster: number[] | null = null;
-            let minClusterCost = Infinity;
-            let bestClusterItin: any = null;
-            let bestClusterBreakdown: any = null;
-
-            for (const perm of perms) {
-              const pathIndices = [0, ...perm];
-
-              let chainValid = true;
-              if (getDist(0, perm[0]) === Infinity) chainValid = false;
-              for (let z = 0; z < perm.length - 1; z++) {
-                if (getDist(perm[z], perm[z + 1]) === Infinity) {
-                  chainValid = false;
-                  break;
-                }
-              }
-              if (getDist(perm[perm.length - 1], 0) === Infinity)
-                chainValid = false;
-              if (!chainValid) continue;
-
-              const itin = calculateItinerary(
-                pathIndices,
-                allOptimizationPoints,
-                factoredDurations,
-                pcDuration,
-                ocDuration,
-              );
-              if (itin.num_days > MAX_ROUTE_DAYS) continue;
-
-              let d = getDist(0, perm[0]);
-              for (let i = 0; i < perm.length - 1; i++)
-                d += getDist(perm[i], perm[i + 1]);
-              d += getDist(perm[perm.length - 1], 0);
-
-              const nights = itin.num_nights;
-              const gasC = d * costs.km;
-              const foodC = costs.food * itin.num_days;
-              const hotelC = costs.hotel * nights;
-
-              const ocExtra = perm.reduce(
-                (acc, idx) => acc + (allOptimizationPoints[idx]?.ocCount || 0),
-                0,
-              );
-              const ocC = ocExtra * OC_UNIT_COST;
-
-              const totalC = gasC + foodC + hotelC + ocC;
-
-              if (totalC < minClusterCost) {
-                minClusterCost = totalC;
-                bestPermForCluster = perm;
-                bestClusterItin = itin;
-                bestClusterBreakdown = {
-                  gas: gasC,
-                  food: foodC,
-                  hotel: hotelC,
-                  oc: ocC,
-                };
-              }
-            }
-
-            if (bestPermForCluster && bestClusterItin && bestClusterBreakdown) {
-              const metric = minClusterCost / bestPermForCluster.length;
-              if (metric < bestCandidate.metric) {
-                bestCandidate = {
-                  perm: bestPermForCluster,
-                  cost: minClusterCost,
-                  metric,
-                  itin: bestClusterItin,
-                  breakdown: bestClusterBreakdown,
-                };
-              }
-            }
-          }
-        }
-
-        if (
-          bestCandidate.perm.length > 0 &&
-          bestCandidate.itin &&
-          bestCandidate.breakdown
-        ) {
-          const bestPermIndices = bestCandidate.perm;
-          const bestItin = bestCandidate.itin;
-          const bestBreakdown = bestCandidate.breakdown;
-
-          let d = getDist(0, bestPermIndices[0]);
-          for (let i = 0; i < bestPermIndices.length - 1; i++)
-            d += getDist(bestPermIndices[i], bestPermIndices[i + 1]);
-          d += getDist(bestPermIndices[bestPermIndices.length - 1], 0);
-
-          finalRoutes.push({
-            id: routeCounter,
-            name: `Ruta ${routeCounter}`,
-            points: bestPermIndices.map(
-              (idx: number) => allOptimizationPoints[idx],
-            ),
-            logs: bestItin.logs,
-            totalCost: bestCandidate.cost,
-            breakdown: bestBreakdown,
-            distance: parseFloat(d.toFixed(2)),
-            nights: bestItin.num_nights,
-            days: bestItin.num_days,
-            color: "#000",
-          });
-
-          routeCounter++;
-
-          const usedSet = new Set(bestPermIndices);
-          availableIndices = availableIndices.filter(
-            (idx) => !usedSet.has(idx),
-          );
-        } else {
-          const failIdx = farthestIdx;
-          const pathIndices = [0, failIdx];
-          const itin = calculateItinerary(
-            pathIndices,
-            allOptimizationPoints,
-            factoredDurations,
-            pcDuration,
-            ocDuration,
-          );
-          const d = distances[0][failIdx] * 2;
-          const nights = itin.num_nights;
-          const gasC = d * costs.km;
-          const foodC = costs.food * itin.num_days;
-          const hotelC = costs.hotel * nights;
-          const pObj = allOptimizationPoints[failIdx];
-          const ocC = pObj.ocCount * OC_UNIT_COST;
-          const totalC = gasC + foodC + hotelC + ocC;
-
-          finalRoutes.push({
-            id: routeCounter,
-            name: `Ruta ${routeCounter} (⚠️ >5 Días)`,
-            points: [pObj],
-            logs: itin.logs,
-            totalCost: totalC,
-            breakdown: { gas: gasC, food: foodC, hotel: hotelC, oc: ocC },
-            distance: d,
-            nights,
-            days: itin.num_days,
-            color: "#ef4444",
-          });
-
-          routeCounter++;
-          availableIndices = availableIndices.filter((i) => i !== failIdx);
-        }
-      }
-
-      finalRoutes.forEach((r: any, idx: number) => {
-        if (!String(r.color).includes("ef4444"))
-          r.color = ROUTE_COLORS[idx % ROUTE_COLORS.length];
       });
 
-      const totalSystemCost = finalRoutes.reduce(
-        (acc: number, r: any) => acc + r.totalCost,
-        0,
-      );
-      const totalDistance = finalRoutes.reduce(
-        (acc: number, r: any) => acc + r.distance,
-        0,
-      );
-      const totalNights = finalRoutes.reduce(
-        (acc: number, r: any) => acc + r.nights,
-        0,
-      );
-      const totalDays = finalRoutes.reduce(
-        (acc: number, r: any) => acc + r.days,
-        0,
-      );
+      console.log("✅ Rutas transformadas:", transformedRoutes);
 
-      setMasterPlan({
-        totalSystemCost,
-        routes: finalRoutes,
-        totalDistance,
-        totalNights,
-        totalDays,
-        pointsCovered: activeLocations.length,
-      });
+      // 🔥 ACTUALIZAR ESTADO
+      const masterPlanResult = {
+        totalSystemCost: response.totalSystemCost || 0,
+        routes: transformedRoutes,
+        totalDistance: response.totalDistance || 0,
+        totalNights: response.totalNights || 0,
+        totalDays: response.totalDays || 0,
+        pointsCovered: response.pointsCovered || 0,
+      };
+
+      console.log("🎯 Plan Maestro Final:", masterPlanResult);
+
+      setMasterPlan(masterPlanResult);
 
       setLogs((prev) => [
-        `✓ Plan generado para ${activeLocations.length} puntos activos.`,
+        `✓ Plan generado por el backend: ${response.routes.length} rutas para ${response.pointsCovered} puntos.`,
         ...prev,
       ]);
     } catch (e: any) {
       if (e.name !== "AbortError") {
-        console.error(e);
-        setLogs((prev) => ["❌ Error en Optimización.", ...prev]);
+        console.error("❌ Error completo:", e);
+        setLogs((prev) => [
+          `❌ Error al conectar con el backend: ${e.message}`,
+          ...prev,
+        ]);
+        alert(`Error: ${e.message}`);
       }
     } finally {
       setIsOptimizing(false);
@@ -643,6 +415,23 @@ export default function App() {
     abortControllerRef.current?.abort();
     setIsProcessing(false);
     setIsOptimizing(false);
+  };
+
+  // 🔥 FUNCIÓN PARA DESCARGAR EXCEL DESDE EL BACKEND
+  const handleDownloadExcel = async () => {
+    if (!sessionId) {
+      alert("No hay sesión activa. Por favor, genera el plan primero.");
+      return;
+    }
+
+    try {
+      setLogs((prev) => ["📥 Descargando Excel desde el backend...", ...prev]);
+      await downloadExcelReport(sessionId);
+      setLogs((prev) => ["✓ Excel descargado exitosamente.", ...prev]);
+    } catch (error: any) {
+      setLogs((prev) => [`❌ Error al descargar Excel: ${error.message}`, ...prev]);
+      alert(`Error al descargar Excel: ${error.message}`);
+    }
   };
 
   const renderMasterPlan = () => {
@@ -740,7 +529,7 @@ export default function App() {
                 <div className="flex gap-4 text-xs font-mono font-bold text-slate-600 mt-2 md:mt-0">
                   <span>
                     <i className="fa-solid fa-road mr-1"></i>
-                    {route.distance}km
+                    {route.distance.toFixed(1)}km
                   </span>
                   <span
                     className={
@@ -860,12 +649,12 @@ export default function App() {
               Planificador de Rutas ODS
             </h1>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">
-              Cálculo de rutas óptimas - Laleska Arroyo (IS)
+              Cálculo de rutas óptimas - Backend Java + Frontend React
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* INDICADOR DE COBERTURA (Recuperado) */}
+            {/* INDICADOR DE COBERTURA */}
             <div className="bg-slate-50 px-6 py-2 rounded-2xl border border-slate-100 text-center mr-4">
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">
                 Cobertura de Puntos
@@ -899,7 +688,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* CUERPO PRINCIPAL: MAPA + CONFIGURACIÓN COMPLETA */}
+        {/* CUERPO PRINCIPAL: MAPA + CONFIGURACIÓN */}
         <div className="flex flex-col lg:flex-row gap-6">
           {/* MAPA */}
           <section className="flex-1 bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden relative h-[650px]">
@@ -913,7 +702,7 @@ export default function App() {
               <MapClickHandler onClick={handleMapClick} />
               <MapSearchControl />
 
-              {/* Renderizado de Marcadores */}
+              {/* Marcadores */}
               {locations.map((loc, idx) => (
                 <Marker
                   key={loc.id}
@@ -962,9 +751,7 @@ export default function App() {
                       weight: 4,
                       opacity: 1,
                       lineJoin: "round",
-                      // --- CAMBIO A LÍNEA PUNTEADA ---
                       dashArray: "10, 10",
-                      // -------------------------------
                     }}
                   >
                     <Popup>
@@ -980,17 +767,16 @@ export default function App() {
             </MapContainer>
           </section>
 
-          {/* 2. PANEL LATERAL DE CONFIGURACIÓN EDITABLE */}
+          {/* PANEL LATERAL DE CONFIGURACIÓN */}
           <aside className="w-full lg:w-[450px] space-y-6">
             <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl p-8 space-y-6">
-              {/* SECCIÓN UNIFICADA DE PARÁMETROS */}
               <div className="space-y-6">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3 flex justify-between items-center">
                   Configuración del Sistema
                   <span className="text-sunass-blue">V2.0</span>
                 </h3>
 
-                {/* Input de Coordenadas Integrado */}
+                {/* Input de Coordenadas */}
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">
                     <i className="fa-solid fa-location-crosshairs mr-1"></i>{" "}
@@ -1005,15 +791,14 @@ export default function App() {
                   />
                 </div>
 
-                {/* Configuración de Tiempos Actualizada */}
+                {/* Configuración de Tiempos */}
                 <div className="grid grid-cols-1 gap-4">
-                  {/* Categoría PC */}
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
                       Categoría PC
                     </label>
                     <div className="flex gap-1 flex-wrap">
-                      {[3, 4, 4.5, 5].map((t) => (
+                      {[180, 240, 270, 300].map((t) => (
                         <button
                           key={t}
                           onClick={() => setPcDuration(t)}
@@ -1023,19 +808,18 @@ export default function App() {
                               : "border-slate-50 text-slate-300 hover:border-slate-200"
                           }`}
                         >
-                          {t}h
+                          {t / 60}h
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Categoría OC */}
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
                       Categoría OC
                     </label>
                     <div className="flex gap-1 flex-wrap">
-                      {[3, 4, 5].map((t) => (
+                      {[180, 240, 300].map((t) => (
                         <button
                           key={t}
                           onClick={() => setOcDuration(t)}
@@ -1045,14 +829,14 @@ export default function App() {
                               : "border-slate-50 text-slate-300 hover:border-slate-200"
                           }`}
                         >
-                          {t}h
+                          {t / 60}h
                         </button>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Costos y Factores (Grid más compacto) */}
+                {/* Costos y Factores */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 relative">
                     <span className="absolute top-2 right-3 text-[8px] font-black text-slate-300 uppercase">
@@ -1165,9 +949,8 @@ export default function App() {
           </aside>
         </div>
 
-        {/* SECCIÓN DE RESULTADOS: Crece dinámicamente hacia abajo */}
+        {/* SECCIÓN DE RESULTADOS */}
         <section className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden min-h-[600px]">
-          {/* TABS DE RESULTADOS (Recuperado: Km Distancia / Min Tiempo) */}
           <div className="px-10 py-8 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 bg-slate-50/50">
             <div className="flex items-center gap-5">
               <div className="w-14 h-14 bg-sunass-blue rounded-2xl shadow-lg flex items-center justify-center text-white">
@@ -1202,37 +985,15 @@ export default function App() {
               </div>
             </div>
 
-            {viewMode === "optimization" && masterPlan && (
+            {/* 🔥 BOTÓN EXCEL DEL BACKEND */}
+            {viewMode === "optimization" && masterPlan && sessionId && (
               <div className="flex gap-4">
                 <button
-                  onClick={() =>
-                    downloadMasterPDF({
-                      masterPlan,
-                      matrixLocations,
-                      distanceMatrix,
-                      costs,
-                      pcDuration,
-                      ocDuration,
-                    })
-                  }
-                  className="px-8 py-3 bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
-                >
-                  PDF
-                </button>
-                <button
-                  onClick={() =>
-                    downloadMasterCSV({
-                      masterPlan,
-                      matrixLocations,
-                      distanceMatrix,
-                      costs,
-                      pcDuration,
-                      ocDuration,
-                    })
-                  }
+                  onClick={handleDownloadExcel}
                   className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
                 >
-                  Excel
+                  <i className="fa-solid fa-file-excel mr-2"></i>
+                  Excel (Backend)
                 </button>
               </div>
             )}
@@ -1304,7 +1065,7 @@ export default function App() {
         <footer className="py-20 text-center">
           <div className="h-px bg-slate-200 w-24 mx-auto mb-8"></div>
           <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">
-            Laleska Arroyo • Sistema de Gestión ODS 2026
+            Sistema de Gestión ODS 2026 • Backend Java + React
           </p>
         </footer>
       </div>

@@ -23,18 +23,17 @@ public class ItineraryCalculator {
 
         List<DayLog> logs = new ArrayList<>();
 
+        // El primer punto es siempre el origen (Base ODS)
         DayLog currentLog = startNewDay(currentDay, allPoints.get(currentLocIdx).getName());
 
         List<Integer> activitiesIndices = pathIndices.subList(1, pathIndices.size());
 
         for (Integer targetIdx : activitiesIndices) {
-
             Location targetPoint = allPoints.get(targetIdx);
             int travelTime = (int) timeMatrix[currentLocIdx][targetIdx];
 
-            if (currentTime > 0 &&
-                    (currentTime + travelTime) > RoutingRules.MAX_WORK_DAY) {
-
+            // 1. Validar si el viaje al siguiente punto obliga a cerrar el día (Lógica index.tsx)
+            if (currentTime > 0 && (currentTime + travelTime) > RoutingRules.MAX_WORK_DAY) {
                 closeDay(currentLog, allPoints.get(currentLocIdx).getName(),
                         "Fin de jornada por viaje largo hacia siguiente punto.",
                         currentTime);
@@ -43,120 +42,82 @@ public class ItineraryCalculator {
                 nights++;
                 currentDay++;
                 currentTime = 0;
-
-                currentLog = startNewDay(currentDay,
-                        allPoints.get(currentLocIdx).getName());
+                currentLog = startNewDay(currentDay, allPoints.get(currentLocIdx).getName());
             }
 
+            // Sumar tiempo de viaje
             currentTime += travelTime;
-            currentLog.setTravelMinutes(
-                    currentLog.getTravelMinutes() + travelTime);
-
+            currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelTime);
             currentLocIdx = targetIdx;
 
-            int baseDuration = targetPoint.getCategory() == Location.Category.OC
-                    ? ocDuration
-                    : pcDuration;
+            // 2. Determinar duración de actividades en el punto
+            int baseDuration = targetPoint.getCategory() == Location.Category.OC ? ocDuration : pcDuration;
 
             List<Integer> tasks = new ArrayList<>();
             tasks.add(baseDuration);
-
+            // Agregar OCs adicionales si existen
             for (int k = 1; k < targetPoint.getOcCount(); k++) {
                 tasks.add(ocDuration);
             }
 
+            // 3. Procesar tareas en el punto (puede desbordar al día siguiente)
             for (Integer taskDuration : tasks) {
-
-                System.out.println(
-                        "[DAY BREAK] currTime=" + currentTime +
-                                " travel=" + travelTime +
-                                " task=" + taskDuration +
-                                " MAX=" + RoutingRules.MAX_WORK_DAY
-                );
-
-                /*Si quieres que el greedy intente exprimir más el día usa MAX_TOTAL_DAY*/
                 if (currentTime + taskDuration > RoutingRules.MAX_WORK_DAY) {
-
                     closeDay(currentLog, targetPoint.getName(),
                             "Cierre de día. Actividades continúan mañana.",
                             currentTime);
 
                     logs.add(currentLog);
-
                     nights++;
                     currentDay++;
                     currentTime = 0;
-
-                    currentLog = startNewDay(currentDay,
-                            targetPoint.getName());
+                    currentLog = startNewDay(currentDay, targetPoint.getName());
                 }
 
                 currentTime += taskDuration;
+                currentLog.setWorkMinutes(currentLog.getWorkMinutes() + taskDuration);
 
-                currentLog.setWorkMinutes(
-                        currentLog.getWorkMinutes() + taskDuration);
-
-                if (!currentLog.getActivityPoints()
-                        .contains(targetPoint.getName())) {
-                    currentLog.getActivityPoints()
-                            .add(targetPoint.getName());
+                // Registrar que se trabajó en este punto este día
+                if (!currentLog.getActivityPoints().contains(targetPoint.getName())) {
+                    currentLog.getActivityPoints().add(targetPoint.getName());
                 }
             }
 
-            currentLog.getActivityOcCounts()
-                    .put(targetPoint.getName(),
-                            targetPoint.getOcCount());
+            // Guardar conteo de OCs para el badge de la UI (+1 OC, etc)
+            currentLog.getActivityOcCounts().put(targetPoint.getName(), targetPoint.getOcCount());
         }
 
-        // ---- Retorno a ODS ----
-
+        // ---- 4. Lógica de Retorno a ODS (Reflejando index.tsx) ----
         int originIdx = pathIndices.get(0);
         int returnTime = (int) timeMatrix[currentLocIdx][originIdx];
 
-        System.out.println(
-                "[RETURN CHECK] currTime=" + currentTime +
-                        " return=" + returnTime +
-                        " MAX_TOTAL=" + RoutingRules.MAX_TOTAL_DAY
-        );
-
+        // Validar si el retorno cabe en el límite extendido (11h / 660min)
         if (currentTime + returnTime > RoutingRules.MAX_TOTAL_DAY) {
-
             closeDay(currentLog,
                     allPoints.get(currentLocIdx).getName(),
-                    "Pernocte por retorno que excede límite de 11h.",
+                    "Pernocte por retorno que excede límite de jornada extendida.",
                     currentTime);
 
             logs.add(currentLog);
-
             nights++;
             currentDay++;
             currentTime = 0;
-
-            currentLog = startNewDay(currentDay,
-                    allPoints.get(currentLocIdx).getName());
+            currentLog = startNewDay(currentDay, allPoints.get(currentLocIdx).getName());
         }
 
         currentTime += returnTime;
+        currentLog.setTravelMinutes(currentLog.getTravelMinutes() + returnTime);
 
-        currentLog.setTravelMinutes(
-                currentLog.getTravelMinutes() + returnTime);
-
-        int overtime = Math.max(0,
-                currentTime - RoutingRules.MAX_WORK_DAY);
-
-        currentLog.setOvertimeMinutes(
-                currentLog.getOvertimeMinutes() + overtime);
-
+        // Calcular sobretiempo final del día de retorno
+        int overtime = Math.max(0, currentTime - RoutingRules.MAX_WORK_DAY);
+        
+        currentLog.setOvertimeMinutes(overtime);
         currentLog.setTotalDayMinutes(currentTime);
         currentLog.setFinalLocation("ODS (Retorno)");
         currentLog.setReturn(true);
-
-        currentLog.setNote(
-                overtime > 0
-                        ? "Retorno finalizado con "
-                        + overtime + "min de sobretiempo permitido."
-                        : "Retorno exitoso a ODS."
-        );
+        currentLog.setNote(overtime > 0 
+            ? "Retorno finalizado con " + overtime + "min de sobretiempo permitido." 
+            : "Retorno exitoso a base ODS.");
 
         logs.add(currentLog);
 
@@ -166,33 +127,27 @@ public class ItineraryCalculator {
     // ================== Helpers privados ==================
 
     private DayLog startNewDay(int day, String locationName) {
-
         DayLog log = new DayLog();
-
         log.setDay(day);
         log.setStartLocation(locationName);
         log.setActivityPoints(new ArrayList<>());
         log.setActivityOcCounts(new HashMap<>());
-
         log.setTravelMinutes(0);
         log.setWorkMinutes(0);
         log.setOvertimeMinutes(0);
         log.setTotalDayMinutes(0);
-
         log.setFinalLocation("");
         log.setReturn(false);
-
         return log;
     }
 
-    private void closeDay(
-            DayLog log,
-            String finalLocation,
-            String note,
-            int totalMinutes
-    ) {
+    private void closeDay(DayLog log, String finalLocation, String note, int totalMinutes) {
         log.setFinalLocation(finalLocation);
         log.setNote(note);
         log.setTotalDayMinutes(totalMinutes);
+        
+        // Calcular sobretiempo de la jornada (si excede MAX_WORK_DAY)
+        int overtime = Math.max(0, totalMinutes - RoutingRules.MAX_WORK_DAY);
+        log.setOvertimeMinutes(overtime);
     }
 }
