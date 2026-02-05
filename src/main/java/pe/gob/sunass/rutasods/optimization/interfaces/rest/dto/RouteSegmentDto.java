@@ -2,6 +2,7 @@ package pe.gob.sunass.rutasods.optimization.interfaces.rest.dto;
 
 import lombok.Getter;
 import lombok.Setter;
+import pe.gob.sunass.rutasods.costing.interfaces.rest.dto.CostBreakdownDto;
 import pe.gob.sunass.rutasods.shared.domain.model.RouteSegment;
 
 import java.util.List;
@@ -19,6 +20,10 @@ public class RouteSegmentDto {
     private int nights;
     private int days;
 
+    private List<DayLogDto> logs;
+    private CostBreakdownDto breakdown;
+    private String color;
+
     private List<LocationDto> points;
 
     public static RouteSegmentDto fromDomain(
@@ -33,6 +38,19 @@ public class RouteSegmentDto {
         dto.setDistance(r.getDistance());
         dto.setNights(r.getNights());
         dto.setDays(r.getDays());
+
+        dto.setLogs(
+                r.getLogs()
+                        .stream()
+                        .map(DayLogDto::fromDomain)
+                        .toList()
+        );
+
+        dto.setColor(r.getColor());
+        dto.setBreakdown(
+                CostBreakdownDto.fromDomain(r.getBreakdown())
+        );
+
 
         dto.setPoints(
                 r.getPoints()

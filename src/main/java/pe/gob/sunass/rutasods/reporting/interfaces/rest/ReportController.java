@@ -8,13 +8,13 @@ import org.springframework.web.bind.annotation.*;
 import pe.gob.sunass.rutasods.reporting.application.internal.GenerateExcelUseCase;
 
 @RestController
-@RequestMapping("/reports")
+@RequestMapping("/api")
 @RequiredArgsConstructor
 public class ReportController {
 
     private final GenerateExcelUseCase generateExcelUseCase;
 
-    @GetMapping("/plan-maestro/excel/{sessionId}")
+    @GetMapping("/reports/plan-maestro/excel/{sessionId}")
     public ResponseEntity<byte[]> downloadExcel(
             @PathVariable String sessionId
     ) {

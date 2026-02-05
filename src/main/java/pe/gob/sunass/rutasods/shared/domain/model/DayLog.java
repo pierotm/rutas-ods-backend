@@ -25,4 +25,5 @@ public class DayLog {
     private String note;
 
     // getters/setters
+
 }
