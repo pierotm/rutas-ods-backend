@@ -912,6 +912,8 @@ export default function App() {
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
               <MapClickHandler onClick={handleMapClick} />
               <MapSearchControl />
+
+              {/* Renderizado de Marcadores */}
               {locations.map((loc, idx) => (
                 <Marker
                   key={loc.id}
@@ -926,7 +928,11 @@ export default function App() {
                       </p>
                       <button
                         onClick={() => handleToggleActive(loc.id)}
-                        className={`w-full py-2 rounded-lg text-[9px] font-black uppercase ${loc.isActive ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}
+                        className={`w-full py-2 rounded-lg text-[9px] font-black uppercase ${
+                          loc.isActive
+                            ? "bg-red-50 text-red-600"
+                            : "bg-emerald-50 text-emerald-600"
+                        }`}
                       >
                         {loc.isActive ? "Desactivar Punto" : "Activar Punto"}
                       </button>
@@ -934,13 +940,43 @@ export default function App() {
                   </Popup>
                 </Marker>
               ))}
-              {masterPlan?.routes?.map((route) => (
-                <Polyline
-                  key={route.id}
-                  pathOptions={{ color: route.color, weight: 4, opacity: 0.8 }}
-                  positions={route.points.map((p) => [p.lat, p.lng]) as any}
-                />
-              ))}
+
+              {/* DIBUJO DE RUTAS DEL PLAN MAESTRO */}
+              {masterPlan?.routes?.map((route, routeIdx) => {
+                const positions = route.points
+                  .filter((p) => p && p.lat && p.lng)
+                  .map(
+                    (p) => [Number(p.lat), Number(p.lng)] as L.LatLngExpression,
+                  );
+
+                if (positions.length < 2) return null;
+
+                return (
+                  <Polyline
+                    key={`route-${route.id || routeIdx}`}
+                    positions={positions}
+                    pathOptions={{
+                      color:
+                        route.color ||
+                        ROUTE_COLORS[routeIdx % ROUTE_COLORS.length],
+                      weight: 4,
+                      opacity: 1,
+                      lineJoin: "round",
+                      // --- CAMBIO A LÍNEA PUNTEADA ---
+                      dashArray: "10, 10",
+                      // -------------------------------
+                    }}
+                  >
+                    <Popup>
+                      <div className="font-sans p-2">
+                        <p className="font-black text-slate-800 uppercase text-[10px]">
+                          {route.name}
+                        </p>
+                      </div>
+                    </Popup>
+                  </Polyline>
+                );
+              })}
             </MapContainer>
           </section>
 
@@ -969,34 +1005,45 @@ export default function App() {
                   />
                 </div>
 
-                {/* Configuración de Tiempos */}
+                {/* Configuración de Tiempos Actualizada */}
                 <div className="grid grid-cols-1 gap-4">
+                  {/* Categoría PC */}
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
                       Categoría PC
                     </label>
-                    <div className="flex gap-1">
-                      {[3, 4, 4.5].map((t) => (
+                    <div className="flex gap-1 flex-wrap">
+                      {[3, 4, 4.5, 5].map((t) => (
                         <button
                           key={t}
                           onClick={() => setPcDuration(t)}
-                          className={`flex-1 py-2 rounded-xl text-[10px] font-black border-2 transition-all ${pcDuration === t ? "border-sunass-blue bg-blue-50 text-sunass-blue" : "border-slate-50 text-slate-300"}`}
+                          className={`flex-1 min-w-[50px] py-2 rounded-xl text-[10px] font-black border-2 transition-all ${
+                            pcDuration === t
+                              ? "border-sunass-blue bg-blue-50 text-sunass-blue"
+                              : "border-slate-50 text-slate-300 hover:border-slate-200"
+                          }`}
                         >
                           {t}h
                         </button>
                       ))}
                     </div>
                   </div>
+
+                  {/* Categoría OC */}
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
                       Categoría OC
                     </label>
-                    <div className="flex gap-1">
-                      {[3, 4].map((t) => (
+                    <div className="flex gap-1 flex-wrap">
+                      {[3, 4, 5].map((t) => (
                         <button
                           key={t}
                           onClick={() => setOcDuration(t)}
-                          className={`flex-1 py-2 rounded-xl text-[10px] font-black border-2 transition-all ${ocDuration === t ? "border-sunass-blue bg-blue-50 text-sunass-blue" : "border-slate-50 text-slate-300"}`}
+                          className={`flex-1 min-w-[50px] py-2 rounded-xl text-[10px] font-black border-2 transition-all ${
+                            ocDuration === t
+                              ? "border-sunass-blue bg-blue-50 text-sunass-blue"
+                              : "border-slate-50 text-slate-300 hover:border-slate-200"
+                          }`}
                         >
                           {t}h
                         </button>
