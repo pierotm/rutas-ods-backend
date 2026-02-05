@@ -7,26 +7,20 @@ import {
   TileLayer,
 } from "react-leaflet";
 import L from "leaflet";
-import {
-  optimizeWithBackend,
-  downloadExcelReport,
-} from "./services/backendApi";
 
 declare const XLSX: any;
 
 import type { Location, Matrix, MasterPlanResult } from "./domain/types";
 import { ROUTE_COLORS, MAX_ROUTE_DAYS, OC_UNIT_COST } from "./config/constants";
 import { parseCoords } from "./utils/coords";
-import { getCombinations, getPermutations } from "./utils/combinatorics";
-import { calculateItinerary } from "./domain/itinerary";
 import { fetchOSRMTable } from "./services/osrm";
-import { downloadMasterCSV, downloadMasterPDF } from "./services/export";
 
 import MapClickHandler from "./ui/components/MapClickHandler";
 import MapSearchControl from "./ui/components/MapSearchControl";
 import { createCustomIcon } from "./ui/components/icons";
 
-const isValidConnection = (_a: Location, _b: Location): boolean => true;
+// 🔥 IMPORTAR SERVICIO DEL BACKEND
+import { optimizeWithBackend, downloadExcelReport } from "./services/backendApi";
 
 export default function App() {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -56,12 +50,16 @@ export default function App() {
 
   const mapRef = useRef<L.Map | null>(null);
 
+  // 🔥 SESSION ID DEL BACKEND
+  const [sessionId, setSessionId] = useState<string>("");
+
   const resetMatrices = () => {
     setDistanceMatrix([]);
     setTimeMatrix([]);
     setRawTimeMatrix([]);
     setMatrixLocations([]);
     setMasterPlan(null);
+    setSessionId("");
   };
 
   const handleMapClick = (latlng: L.LatLng) => {
@@ -233,7 +231,6 @@ export default function App() {
     }
   }, [timeFactor, rawTimeMatrix]);
 
-  // Evita glitches Leaflet al cambiar layout / resultados
   useEffect(() => {
     const t = setTimeout(() => mapRef.current?.invalidateSize(), 120);
     return () => clearTimeout(t);
@@ -284,6 +281,7 @@ export default function App() {
     }
   };
 
+  // 🔥 FUNCIÓN ACTUALIZADA PARA USAR EL BACKEND
   const runMasterPlanOptimization = async () => {
     if (locations.length === 0) return alert("Agrega puntos.");
     const ods = parseCoords(odsInput);
@@ -335,8 +333,8 @@ export default function App() {
 
       console.log("📥 Respuesta del backend:", response);
 
-      // 🔥 GUARDAR EL SESSION ID PARA DESCARGAR EXCEL
-      const sessionId = response.sessionId;
+      // 🔥 GUARDAR EL SESSION ID
+      setSessionId(response.sessionId);
 
       // 🔥 TRANSFORMAR RESPUESTA DEL BACKEND AL FORMATO DEL FRONTEND
       const transformedRoutes = response.routes.map((route, idx) => {
@@ -365,8 +363,7 @@ export default function App() {
             travel_minutes: log.travelMinutes ?? log.travel_minutes ?? 0,
             work_minutes: log.workMinutes ?? log.work_minutes ?? 0,
             overtime_minutes: log.overtimeMinutes ?? log.overtime_minutes ?? 0,
-            total_day_minutes:
-              log.totalDayMinutes ?? log.total_day_minutes ?? 0,
+            total_day_minutes: log.totalDayMinutes ?? log.total_day_minutes ?? 0,
             final_location: log.finalLocation || log.final_location || "",
             is_return: log.isReturn ?? log.is_return ?? false,
             note: log.note || "",
@@ -396,9 +393,6 @@ export default function App() {
 
       setMasterPlan(masterPlanResult);
 
-      // Guardar sessionId para descargas
-      (window as any).__currentSessionId = sessionId;
-
       setLogs((prev) => [
         `✓ Plan generado por el backend: ${response.routes.length} rutas para ${response.pointsCovered} puntos.`,
         ...prev,
@@ -423,127 +417,224 @@ export default function App() {
     setIsOptimizing(false);
   };
 
+  // 🔥 FUNCIÓN PARA DESCARGAR EXCEL DESDE EL BACKEND
+  const handleDownloadExcel = async () => {
+    if (!sessionId) {
+      alert("No hay sesión activa. Por favor, genera el plan primero.");
+      return;
+    }
+
+    try {
+      setLogs((prev) => ["📥 Descargando Excel desde el backend...", ...prev]);
+      await downloadExcelReport(sessionId);
+      setLogs((prev) => ["✓ Excel descargado exitosamente.", ...prev]);
+    } catch (error: any) {
+      setLogs((prev) => [`❌ Error al descargar Excel: ${error.message}`, ...prev]);
+      alert(`Error al descargar Excel: ${error.message}`);
+    }
+  };
+
   const renderMasterPlan = () => {
     if (!masterPlan) return null;
 
+    const pcCount = masterPlan.routes.reduce(
+      (acc, r) => acc + r.points.filter((p) => p.category === "PC").length,
+      0,
+    );
+    const ocCount = masterPlan.routes.reduce(
+      (acc, r) => acc + r.points.filter((p) => p.category === "OC").length,
+      0,
+    );
+
     return (
-      <div className="space-y-12">
-        {masterPlan.routes.map((route, idx) => (
-          <div
-            key={idx}
-            className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden"
-          >
-            {/* Cabecera de la Ruta */}
-            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
-              <div>
-                <h4 className="font-black text-slate-800 uppercase tracking-tighter text-lg">
-                  {route.name}
-                </h4>
-                <div className="flex gap-4 mt-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    {route.points.length} Puntos visitados
-                  </span>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    {route.days} Días / {route.nights} Noches
-                  </span>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="block text-2xl font-black text-slate-800">
-                  S/. {route.totalCost.toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* SECUENCIA PRINCIPAL (Requirement: route.points siempre) */}
-            <div className="p-8">
-              <h5 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-6">
-                Secuencia de Puntos
-              </h5>
-              <div className="flex flex-wrap gap-3">
-                {route.points.map((p, pIdx) => (
-                  <div key={pIdx} className="flex items-center gap-3">
-                    <div className="bg-slate-100 px-4 py-2 rounded-xl flex items-center gap-2 border border-slate-200">
-                      <span className="text-[10px] font-black text-slate-400">
-                        {pIdx + 1}
-                      </span>
-                      <span className="text-xs font-bold text-slate-700">
-                        {p.name}
-                      </span>
-                      {p.ocCount > 0 && (
-                        <span className="bg-sunass-blue/10 text-sunass-blue text-[9px] px-1.5 py-0.5 rounded-md font-black">
-                          +{p.ocCount} OC
-                        </span>
-                      )}
-                    </div>
-                    {pIdx < route.points.length - 1 && (
-                      <i className="fa-solid fa-chevron-right text-[10px] text-slate-300"></i>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* LOGS DIARIOS (Requirement: logs si existen; si no, ocúltalos) */}
-            {route.logs && route.logs.length > 0 && (
-              <div className="p-8 bg-slate-50/50 border-t border-slate-100">
-                <h5 className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-6">
-                  Itinerario Detallado (Bitácora)
-                </h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {route.logs.map((log, lIdx) => (
-                    <div
-                      key={lIdx}
-                      className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <span className="bg-slate-800 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase">
-                          Día {log.day}
-                        </span>
-                        {log.is_return && (
-                          <span className="bg-emerald-100 text-emerald-600 text-[9px] px-2 py-1 rounded-md font-black uppercase">
-                            Retorno a Base
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="space-y-3">
-                        <p className="text-[11px] text-slate-600 leading-relaxed italic">
-                          <i className="fa-solid fa-location-dot text-sunass-blue mr-2"></i>
-                          {log.start_location} →{" "}
-                          {log.activity_points.join(" → ")} →{" "}
-                          {log.final_location}
-                        </p>
-
-                        <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-[10px]">
-                          <span className="font-bold text-slate-400">
-                            VIAJE:{" "}
-                            <span className="text-slate-700">
-                              {log.travel_minutes}m
-                            </span>
-                          </span>
-                          <span className="font-bold text-slate-400">
-                            TRABAJO:{" "}
-                            <span className="text-slate-700">
-                              {log.work_minutes}m
-                            </span>
-                          </span>
-                        </div>
-
-                        {log.note && (
-                          <div className="mt-3 bg-amber-50 p-2 rounded-lg text-[9px] text-amber-700 font-medium">
-                            <i className="fa-solid fa-circle-info mr-1"></i>{" "}
-                            {log.note}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+      <div className="space-y-8 animate-fade-in">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="bg-sunass-blue text-white p-4 rounded-2xl shadow-xl border border-sunass-blue transform hover:scale-102 transition-transform col-span-2 md:col-span-1">
+            <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">
+              Costo Total Sistema
+            </p>
+            <p className="text-2xl font-black mt-1">
+              S/. {masterPlan.totalSystemCost.toFixed(2)}
+            </p>
+            <p className="text-[8px] mt-2 italic opacity-90">
+              Para {masterPlan.pointsCovered} puntos
+            </p>
           </div>
-        ))}
+          <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Rutas Generadas
+            </p>
+            <p className="text-2xl font-black text-slate-800 mt-1">
+              {masterPlan.routes.length}
+            </p>
+            <p className="text-[8px] text-slate-400 mt-2 italic">
+              Flota requerida
+            </p>
+          </div>
+          <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Puntos PC
+            </p>
+            <p className="text-2xl font-black text-sunass-blue mt-1">
+              {pcCount}
+            </p>
+            <p className="text-[8px] text-slate-400 mt-2 italic">Cubiertos</p>
+          </div>
+          <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Puntos OC
+            </p>
+            <p className="text-2xl font-black text-purple-600 mt-1">
+              {ocCount}
+            </p>
+            <p className="text-[8px] text-slate-400 mt-2 italic">Cubiertos</p>
+          </div>
+          <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Distancia Total
+            </p>
+            <p className="text-2xl font-black text-slate-800 mt-1">
+              {masterPlan.totalDistance.toFixed(0)} km
+            </p>
+          </div>
+          <div className="bg-white border-2 border-slate-100 p-4 rounded-2xl shadow-sm">
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+              Total Noches
+            </p>
+            <p className="text-2xl font-black text-slate-800 mt-1">
+              {masterPlan.totalNights}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          {masterPlan.routes.map((route) => (
+            <div
+              key={route.id}
+              className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+            >
+              <div className="px-6 py-4 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center bg-slate-50">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: route.color }}
+                  ></div>
+                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">
+                    {route.name}
+                  </h4>
+                  <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">
+                    {route.points.length} puntos
+                  </span>
+                </div>
+                <div className="flex gap-4 text-xs font-mono font-bold text-slate-600 mt-2 md:mt-0">
+                  <span>
+                    <i className="fa-solid fa-road mr-1"></i>
+                    {route.distance.toFixed(1)}km
+                  </span>
+                  <span
+                    className={
+                      route.days > MAX_ROUTE_DAYS
+                        ? "text-red-500 font-black animate-pulse"
+                        : ""
+                    }
+                  >
+                    <i className="fa-solid fa-calendar-day mr-1"></i>
+                    {route.days}d
+                  </span>
+                  <span>
+                    <i className="fa-solid fa-moon mr-1"></i>
+                    {route.nights}n
+                  </span>
+                  <span className="text-sunass-blue">
+                    <i className="fa-solid fa-sack-dollar mr-1"></i>S/.{" "}
+                    {route.totalCost.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-0">
+                <table className="w-full text-[11px] font-medium">
+                  <thead className="bg-white text-slate-400 uppercase font-bold text-[9px] tracking-widest border-b border-slate-100">
+                    <tr>
+                      <th className="px-6 py-2 text-center">Día</th>
+                      <th className="px-6 py-2 text-left">
+                        Itinerario Detallado
+                      </th>
+                      <th className="px-6 py-2 text-center">Tiempos</th>
+                      <th className="px-6 py-2 text-right">Notas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {route.logs.map((log, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="px-6 py-3 text-center font-black text-slate-700">
+                          Día {log.day}
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <span className="text-slate-500">
+                              {log.start_location}
+                            </span>
+                            <i className="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>
+                            {log.activity_points.map((p, i) => {
+                              const pt = route.points.find((x) => x.name === p);
+                              const isOC = pt?.category === "OC";
+                              const ocCount = log.activity_oc_counts[p] || 0;
+                              return (
+                                <React.Fragment key={i}>
+                                  <span
+                                    className={`font-bold ${isOC ? "text-purple-600 bg-purple-50" : "text-sunass-blue bg-blue-50"} px-2 py-0.5 rounded flex items-center gap-1`}
+                                  >
+                                    {p}
+                                    {ocCount > 0 && (
+                                      <span className="text-[9px] bg-purple-600 text-white px-1 rounded">
+                                        +{ocCount}
+                                      </span>
+                                    )}
+                                  </span>
+                                  {i < log.activity_points.length - 1 && (
+                                    <i className="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                            {log.is_return && (
+                              <>
+                                <i className="fa-solid fa-arrow-right text-[8px] text-slate-300"></i>
+                                <span className="font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded flex items-center gap-1">
+                                  ODS{" "}
+                                  <i className="fa-solid fa-flag-checkered text-[10px]"></i>
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 text-center">
+                          <div className="flex flex-col items-center gap-1 font-mono text-[10px]">
+                            <span className="text-slate-500">
+                              🚗 {log.travel_minutes}m
+                            </span>
+                            <span className="text-slate-500">
+                              🛠️ {log.work_minutes}m
+                            </span>
+                            {log.overtime_minutes > 0 && (
+                              <span className="text-red-500 font-black">
+                                ⏱️ +{log.overtime_minutes}m
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-3 text-right text-[10px] text-slate-400 italic max-w-[250px]">
+                          {log.note || "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -558,12 +649,12 @@ export default function App() {
               Planificador de Rutas ODS
             </h1>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">
-              Cálculo de rutas óptimas - Laleska Arroyo (IS)
+              Cálculo de rutas óptimas - Backend Java + Frontend React
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* INDICADOR DE COBERTURA (Recuperado) */}
+            {/* INDICADOR DE COBERTURA */}
             <div className="bg-slate-50 px-6 py-2 rounded-2xl border border-slate-100 text-center mr-4">
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">
                 Cobertura de Puntos
@@ -597,7 +688,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* CUERPO PRINCIPAL: MAPA + CONFIGURACIÓN COMPLETA */}
+        {/* CUERPO PRINCIPAL: MAPA + CONFIGURACIÓN */}
         <div className="flex flex-col lg:flex-row gap-6">
           {/* MAPA */}
           <section className="flex-1 bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden relative h-[650px]">
@@ -611,7 +702,7 @@ export default function App() {
               <MapClickHandler onClick={handleMapClick} />
               <MapSearchControl />
 
-              {/* Renderizado de Marcadores */}
+              {/* Marcadores */}
               {locations.map((loc, idx) => (
                 <Marker
                   key={loc.id}
@@ -640,44 +731,52 @@ export default function App() {
               ))}
 
               {/* DIBUJO DE RUTAS DEL PLAN MAESTRO */}
-              {masterPlan?.routes?.map((route, idx) => {
-                // Extraemos las coordenadas de los puntos de la ruta
-                const pathPositions = route.points
-                  .filter((p) => p.lat !== undefined && p.lng !== undefined)
+              {masterPlan?.routes?.map((route, routeIdx) => {
+                const positions = route.points
+                  .filter((p) => p && p.lat && p.lng)
                   .map(
                     (p) => [Number(p.lat), Number(p.lng)] as L.LatLngExpression,
                   );
 
-                if (pathPositions.length < 2) return null;
+                if (positions.length < 2) return null;
 
                 return (
                   <Polyline
-                    key={`route-line-${route.id || idx}`}
-                    positions={pathPositions}
+                    key={`route-${route.id || routeIdx}`}
+                    positions={positions}
                     pathOptions={{
                       color:
-                        route.color || ROUTE_COLORS[idx % ROUTE_COLORS.length],
+                        route.color ||
+                        ROUTE_COLORS[routeIdx % ROUTE_COLORS.length],
                       weight: 4,
-                      dashArray: "10, 10", // Línea punteada como pediste
-                      opacity: 0.8,
+                      opacity: 1,
+                      lineJoin: "round",
+                      dashArray: "10, 10",
                     }}
-                  />
+                  >
+                    <Popup>
+                      <div className="font-sans p-2">
+                        <p className="font-black text-slate-800 uppercase text-[10px]">
+                          {route.name}
+                        </p>
+                      </div>
+                    </Popup>
+                  </Polyline>
                 );
               })}
             </MapContainer>
           </section>
 
-          {/* 2. PANEL LATERAL DE CONFIGURACIÓN EDITABLE */}
+          {/* PANEL LATERAL DE CONFIGURACIÓN */}
           <aside className="w-full lg:w-[450px] space-y-6">
             <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl p-8 space-y-6">
-              {/* SECCIÓN UNIFICADA DE PARÁMETROS */}
               <div className="space-y-6">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3 flex justify-between items-center">
                   Configuración del Sistema
                   <span className="text-sunass-blue">V2.0</span>
                 </h3>
 
-                {/* Input de Coordenadas Integrado */}
+                {/* Input de Coordenadas */}
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">
                     <i className="fa-solid fa-location-crosshairs mr-1"></i>{" "}
@@ -692,15 +791,14 @@ export default function App() {
                   />
                 </div>
 
-                {/* Configuración de Tiempos Actualizada */}
+                {/* Configuración de Tiempos */}
                 <div className="grid grid-cols-1 gap-4">
-                  {/* Categoría PC */}
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
                       Categoría PC
                     </label>
                     <div className="flex gap-1 flex-wrap">
-                      {[3, 4, 4.5, 5].map((t) => (
+                      {[180, 240, 270, 300].map((t) => (
                         <button
                           key={t}
                           onClick={() => setPcDuration(t)}
@@ -710,19 +808,18 @@ export default function App() {
                               : "border-slate-50 text-slate-300 hover:border-slate-200"
                           }`}
                         >
-                          {t}h
+                          {t / 60}h
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Categoría OC */}
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
                       Categoría OC
                     </label>
                     <div className="flex gap-1 flex-wrap">
-                      {[3, 4, 5].map((t) => (
+                      {[180, 240, 300].map((t) => (
                         <button
                           key={t}
                           onClick={() => setOcDuration(t)}
@@ -732,14 +829,14 @@ export default function App() {
                               : "border-slate-50 text-slate-300 hover:border-slate-200"
                           }`}
                         >
-                          {t}h
+                          {t / 60}h
                         </button>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Costos y Factores (Grid más compacto) */}
+                {/* Costos y Factores */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 relative">
                     <span className="absolute top-2 right-3 text-[8px] font-black text-slate-300 uppercase">
@@ -852,9 +949,8 @@ export default function App() {
           </aside>
         </div>
 
-        {/* SECCIÓN DE RESULTADOS: Crece dinámicamente hacia abajo */}
+        {/* SECCIÓN DE RESULTADOS */}
         <section className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl overflow-hidden min-h-[600px]">
-          {/* TABS DE RESULTADOS (Recuperado: Km Distancia / Min Tiempo) */}
           <div className="px-10 py-8 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 bg-slate-50/50">
             <div className="flex items-center gap-5">
               <div className="w-14 h-14 bg-sunass-blue rounded-2xl shadow-lg flex items-center justify-center text-white">
@@ -889,36 +985,14 @@ export default function App() {
               </div>
             </div>
 
-            {viewMode === "optimization" && masterPlan && (
+            {/* 🔥 BOTÓN EXCEL DEL BACKEND */}
+            {viewMode === "optimization" && masterPlan && sessionId && (
               <div className="flex gap-4">
                 <button
-                  onClick={() =>
-                    downloadMasterPDF({
-                      masterPlan,
-                      matrixLocations,
-                      distanceMatrix,
-                      costs,
-                      pcDuration,
-                      ocDuration,
-                    })
-                  }
-                  className="px-8 py-3 bg-slate-800 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
-                >
-                  PDF
-                </button>
-
-                {/* 🔥 NUEVO BOTÓN QUE USA EL BACKEND */}
-                <button
-                  onClick={() => {
-                    const sessionId = (window as any).__currentSessionId;
-                    if (sessionId) {
-                      downloadExcelReport(sessionId);
-                    } else {
-                      alert("No hay sesión activa. Genera el plan primero.");
-                    }
-                  }}
+                  onClick={handleDownloadExcel}
                   className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
                 >
+                  <i className="fa-solid fa-file-excel mr-2"></i>
                   Excel (Backend)
                 </button>
               </div>
@@ -991,7 +1065,7 @@ export default function App() {
         <footer className="py-20 text-center">
           <div className="h-px bg-slate-200 w-24 mx-auto mb-8"></div>
           <p className="text-[10px] font-black text-slate-300 uppercase tracking-[0.5em]">
-            Laleska Arroyo • Sistema de Gestión ODS 2026
+            Sistema de Gestión ODS 2026 • Backend Java + React
           </p>
         </footer>
       </div>

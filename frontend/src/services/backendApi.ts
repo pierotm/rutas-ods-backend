@@ -1,12 +1,57 @@
+// SERVICIO PARA CONECTAR CON EL BACKEND JAVA
+
 export type LocationDto = {
   id?: number | null;
   name: string;
   lat: number;
   lng: number;
-  ocCount: number;
-  category: string;
-  ubigeo: string;
-  active: boolean;
+  ocCount?: number;
+  category?: string;
+  ubigeo?: string;
+  active?: boolean;
+};
+
+export type DayLogDto = {
+  day: number;
+  startLocation?: string;
+  start_location?: string;
+  activityPoints?: string[];
+  activity_points?: string[];
+  activityOcCounts?: Record<string, number>;
+  activity_oc_counts?: Record<string, number>;
+  travelMinutes?: number;
+  travel_minutes?: number;
+  workMinutes?: number;
+  work_minutes?: number;
+  overtimeMinutes?: number;
+  overtime_minutes?: number;
+  totalDayMinutes?: number;
+  total_day_minutes?: number;
+  finalLocation?: string;
+  final_location?: string;
+  isReturn?: boolean;
+  is_return?: boolean;
+  note?: string;
+};
+
+export type CostBreakdownDto = {
+  gas: number;
+  food: number;
+  hotel: number;
+  oc: number;
+};
+
+export type RouteSegmentDto = {
+  id?: number | null;
+  name?: string;
+  totalCost?: number;
+  distance?: number;
+  nights?: number;
+  days?: number;
+  points?: LocationDto[];
+  logs?: DayLogDto[];
+  breakdown?: CostBreakdownDto;
+  color?: string;
 };
 
 export type OptimizeRequest = {
@@ -15,61 +60,8 @@ export type OptimizeRequest = {
   coverageLimit?: number;
   pcDuration?: number;
   ocDuration?: number;
-  costs?: {
-    km: number;
-    food: number;
-    hotel: number;
-  };
+  costs?: { km?: number; food?: number; hotel?: number };
   timeFactor?: number;
-};
-
-export type DayLogDto = {
-  day: number;
-  startLocation?: string;
-  start_location?: string;
-  
-  activityPoints?: string[];
-  activity_points?: string[];
-  
-  activityOcCounts?: Record<string, number>;
-  activity_oc_counts?: Record<string, number>;
-  
-  travelMinutes?: number;
-  travel_minutes?: number;
-  
-  workMinutes?: number;
-  work_minutes?: number;
-  
-  overtimeMinutes?: number;
-  overtime_minutes?: number;
-  
-  totalDayMinutes?: number;
-  total_day_minutes?: number;
-  
-  finalLocation?: string;
-  final_location?: string;
-  
-  isReturn?: boolean;
-  is_return?: boolean;
-  
-  note?: string;
-};
-
-export type RouteSegmentDto = {
-  id: number;
-  name: string;
-  totalCost: number;
-  distance: number;
-  nights: number;
-  days: number;
-  points: LocationDto[];
-  logs: DayLogDto[];
-  breakdown?: {
-    gas: number;
-    food: number;
-    hotel: number;
-    oc: number;
-  };
 };
 
 export type OptimizeResponse = {
@@ -84,6 +76,7 @@ export type OptimizeResponse = {
 
 /**
  * Llama al endpoint POST /api/optimize del backend
+ * Sin timeout automático - solo se cancela si el usuario aborta manualmente
  */
 export async function optimizeWithBackend(
   payload: OptimizeRequest,
@@ -94,7 +87,7 @@ export async function optimizeWithBackend(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      signal: signal, // Solo usa el signal externo (botón de cancelar del usuario)
+      signal: signal,
     });
 
     if (!res.ok) {
@@ -106,24 +99,35 @@ export async function optimizeWithBackend(
 
     return await res.json();
   } catch (error: any) {
-    // Si el usuario canceló manualmente
     if (error.name === "AbortError") {
       throw new Error("Optimización cancelada por el usuario");
     }
-    // Otros errores de red o del servidor
     throw error;
   }
 }
 
 /**
- * Descarga el Excel del Plan Maestro
+ * Descarga el reporte Excel desde el backend
  */
-export function downloadExcelReport(sessionId: string) {
-  const url = `/reports/plan-maestro/excel/${sessionId}`;
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "plan_maestro.xlsx";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+export async function downloadExcelReport(sessionId: string): Promise<void> {
+  try {
+    const res = await fetch(`/api/reports/plan-maestro/excel/${sessionId}`);
+    
+    if (!res.ok) {
+      throw new Error(`Error al descargar Excel: ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "plan_maestro_detallado.xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Error descargando Excel:", error);
+    throw error;
+  }
 }
