@@ -17,6 +17,8 @@ import { parseCoords } from "./utils/coords";
 import MapClickHandler from "./ui/components/MapClickHandler";
 import MapSearchControl from "./ui/components/MapSearchControl";
 import { createCustomIcon } from "./ui/components/icons";
+import LoginPin from "./ui/components/LoginPin";
+import { isAuthenticated, clearSession } from "./config/auth";
 
 // 🔥 IMPORTAR SERVICIOS DEL BACKEND (MATRIZ Y OPTIMIZACIÓN)
 import {
@@ -26,6 +28,19 @@ import {
 import { calculateMatrixWithBackend } from "./services/matrixApi";
 
 export default function App() {
+  // 🔥 ESTADO DE AUTENTICACIÓN
+  const [isAuth, setIsAuth] = useState(() => {
+    return isAuthenticated();
+  });
+
+  const handleLoginSuccess = () => {
+    setIsAuth(true);
+  };
+
+  const handleLogout = () => {
+    clearSession();
+    setIsAuth(false);
+  };
   const [locations, setLocations] = useState<Location[]>([]);
   const [targetPoints, setTargetPoints] = useState<number>(100);
   const [distanceMatrix, setDistanceMatrix] = useState<Matrix>([]);
@@ -673,6 +688,11 @@ export default function App() {
     );
   };
 
+  // 🔥 MOSTRAR LOGIN SI NO ESTÁ AUTENTICADO
+  if (!isAuth) {
+    return <LoginPin onLogin={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen w-full bg-slate-100 font-sans">
       <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
@@ -697,6 +717,14 @@ export default function App() {
                 <span className="text-slate-300">/</span> {locations.length}
               </p>
             </div>
+
+            {/* 🔥 BOTÓN LOGOUT */}
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 rounded-2xl bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 text-[10px] font-black uppercase tracking-widest transition-all"
+            >
+              <i className="fa-solid fa-sign-out-alt mr-2"></i> Cerrar Sesión
+            </button>
 
             <button
               onClick={handleResetPoints}
