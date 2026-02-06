@@ -695,11 +695,22 @@ export default function App() {
   }
 
   // FUNCIÓN PARA DESCARGAR PDF (SIMILAR A EXCEL, PERO USANDO EL SERVICIO DE PDF)
-  const handleDownloadPDF = () => {
-    if (masterPlan) {
-      downloadMasterPDF(masterPlan);
-    } else {
-      alert("Primero debes calcular el Plan Maestro para generar el reporte.");
+  const handleDownloadPDF = async () => {
+    if (!sessionId) {
+      alert("No hay sesión activa. Por favor, genera el plan primero.");
+      return;
+    }
+
+    try {
+      setLogs((prev) => ["📥 Descargando PDF desde el backend...", ...prev]);
+      await downloadMasterPDF(sessionId);
+      setLogs((prev) => ["✓ PDF descargado exitosamente.", ...prev]);
+    } catch (error: any) {
+      setLogs((prev) => [
+        `❌ Error al descargar PDF: ${error.message}`,
+        ...prev,
+      ]);
+      alert(`Error al descargar PDF: ${error.message}`);
     }
   };
 

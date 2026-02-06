@@ -1,5 +1,4 @@
 import type { MasterPlanResult, Matrix, Location } from "../domain/types";
-import axios from 'axios';
 
 export function downloadMasterCSV(args: {
   masterPlan: MasterPlanResult;
@@ -77,14 +76,20 @@ export function downloadMasterCSV(args: {
   document.body.removeChild(link);
 }
 
-export const downloadMasterPDF = async (plan: MasterPlanResult) => {
+/**
+ * Descarga el PDF del plan maestro desde el backend usando sessionId
+ * @param sessionId ID de la sesión de optimización
+ */
+export const downloadMasterPDF = async (sessionId: string): Promise<void> => {
   try {
-    const response = await axios.post(`http://localhost:5173/reports/pdf`, plan, {
-      responseType: 'blob',
-    });
+    const response = await fetch(`/api/reports/plan-maestro/pdf/${sessionId}`);
+    
+    if (!response.ok) {
+      throw new Error(`Error al descargar PDF: ${response.status}`);
+    }
 
-    // Crear un link temporal para la descarga
-    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', `Plan_Maestro_Rutas_${new Date().getTime()}.pdf`);
@@ -96,6 +101,6 @@ export const downloadMasterPDF = async (plan: MasterPlanResult) => {
     window.URL.revokeObjectURL(url);
   } catch (error) {
     console.error("Error al descargar el PDF:", error);
-    alert("No se pudo generar el PDF. Verifica que el backend esté activo.");
+    throw error;
   }
 };
