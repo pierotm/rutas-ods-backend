@@ -39,7 +39,7 @@ public class OsrmClient {
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .bodyToMono(OsrmTableResponse.class)
-                .timeout(Duration.ofSeconds(props.getTimeoutSeconds()))
+                //.timeout(Duration.ofSeconds(props.getTimeoutSeconds()))
                 .retryWhen(Retry.backoff(2, Duration.ofMillis(400))
                         .maxBackoff(Duration.ofSeconds(2)))
                 .block();
