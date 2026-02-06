@@ -242,7 +242,7 @@ export default function App() {
     if (rawTimeMatrix.length > 0) {
       const factored = rawTimeMatrix.map((row) =>
         row.map((val) => ({
-          value: parseFloat((val * timeFactor).toFixed(1)),
+          value: parseFloat((val * timeFactor).toFixed(2)),
           loading: false,
         })),
       );
@@ -946,9 +946,17 @@ export default function App() {
                       type="number"
                       step="0.1"
                       value={timeFactor}
-                      onChange={(e) =>
-                        setTimeFactor(parseFloat(e.target.value) || 0)
-                      }
+                      onChange={(e) => {
+                        const newValue = parseFloat(e.target.value) || 1.0;
+                        setTimeFactor(newValue);
+                        if (matrixLocations.length > 0) {
+                          setLogs((prev) => [
+                            `🔄 Factor de tiempo actualizado a ${newValue}x (visualización actualizada)`,
+                            ...prev,
+                          ]);
+                        }
+                      }}
+                      
                       className="w-full bg-transparent text-sm font-black text-slate-700 outline-none"
                     />
                   </div>
