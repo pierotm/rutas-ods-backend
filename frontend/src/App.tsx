@@ -19,6 +19,7 @@ import MapSearchControl from "./ui/components/MapSearchControl";
 import { createCustomIcon } from "./ui/components/icons";
 import LoginPin from "./ui/components/LoginPin";
 import { isAuthenticated, clearSession } from "./config/auth";
+import { downloadMasterCSV, downloadMasterPDF } from "./services/export";
 
 // 🔥 IMPORTAR SERVICIOS DEL BACKEND (MATRIZ Y OPTIMIZACIÓN)
 import {
@@ -688,10 +689,19 @@ export default function App() {
     );
   };
 
-  // 🔥 MOSTRAR LOGIN SI NO ESTÁ AUTENTICADO
+  // MOSTRAR LOGIN SI NO ESTÁ AUTENTICADO
   if (!isAuth) {
     return <LoginPin onLogin={handleLoginSuccess} />;
   }
+
+  // FUNCIÓN PARA DESCARGAR PDF (SIMILAR A EXCEL, PERO USANDO EL SERVICIO DE PDF)
+  const handleDownloadPDF = () => {
+    if (masterPlan) {
+      downloadMasterPDF(masterPlan);
+    } else {
+      alert("Primero debes calcular el Plan Maestro para generar el reporte.");
+    }
+  };
 
   return (
     <div className="min-h-screen w-full bg-slate-100 font-sans">
@@ -1043,11 +1053,17 @@ export default function App() {
             {viewMode === "optimization" && masterPlan && sessionId && (
               <div className="flex gap-4">
                 <button
+                  onClick={handleDownloadPDF}
+                  className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl hover:-translate-y-1 active:translate-y-0 flex items-center gap-3"
+                >
+                  <i className="fa-solid fa-file-pdf text-sm"></i> PDF
+                </button>
+                <button
                   onClick={handleDownloadExcel}
                   className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
                 >
                   <i className="fa-solid fa-file-excel mr-2"></i>
-                  Excel (Backend)
+                  Excel
                 </button>
               </div>
             )}
