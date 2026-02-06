@@ -2,7 +2,7 @@
 
 ## 📋 Resumen de Cambios
 
-He actualizado tu aplicación para que utilice el backend Java en lugar de la lógica de optimización en el navegador. Ahora el frontend se comunica con el backend mediante REST API y muestra los resultados con el mismo diseño detallado que tenías en `index.tsx`.
+Aplicación actualizada para que utilice el backend Java en lugar de la lógica de optimización en el navegador. Ahora el frontend se comunica con el backend mediante REST API.
 
 ---
 
