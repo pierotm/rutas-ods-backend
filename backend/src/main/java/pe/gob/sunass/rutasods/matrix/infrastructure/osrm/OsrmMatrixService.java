@@ -69,11 +69,11 @@ public class OsrmMatrixService implements MatrixService {
                 for (int j = 0; j < destChunk.size(); j++) {
                     // distancia en km
                     double km = distM[i][j] / 1000.0;
-                    distancesKm[i][destStart + j] = km;
+                    distancesKm[i][destStart + j] = round2(km);
 
                     // duración en minutos con timeFactor aplicado en backend
                     double minutes = (durSec[i][j] / 60.0) * timeFactor;
-                    durationsMin[i][destStart + j] = round1(minutes);
+                    durationsMin[i][destStart + j] = round2(minutes);
                 }
             }
         }
@@ -92,7 +92,7 @@ public class OsrmMatrixService implements MatrixService {
         return sb.toString();
     }
 
-    private double round1(double v) {
-        return Math.round(v * 10.0) / 10.0;
-    }
+    private double round2(double v) {
+    return Math.round(v * 100.0) / 100.0;
+}
 }

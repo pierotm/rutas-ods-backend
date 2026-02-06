@@ -11,16 +11,19 @@ import L from "leaflet";
 declare const XLSX: any;
 
 import type { Location, Matrix, MasterPlanResult } from "./domain/types";
-import { ROUTE_COLORS, MAX_ROUTE_DAYS, OC_UNIT_COST } from "./config/constants";
+import { ROUTE_COLORS, MAX_ROUTE_DAYS } from "./config/constants";
 import { parseCoords } from "./utils/coords";
-import { fetchOSRMTable } from "./services/osrm";
 
 import MapClickHandler from "./ui/components/MapClickHandler";
 import MapSearchControl from "./ui/components/MapSearchControl";
 import { createCustomIcon } from "./ui/components/icons";
 
-// 🔥 IMPORTAR SERVICIO DEL BACKEND
-import { optimizeWithBackend, downloadExcelReport } from "./services/backendApi";
+// 🔥 IMPORTAR SERVICIOS DEL BACKEND (MATRIZ Y OPTIMIZACIÓN)
+import {
+  optimizeWithBackend,
+  downloadExcelReport,
+} from "./services/backendApi";
+import { calculateMatrixWithBackend } from "./services/matrixApi";
 
 export default function App() {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -236,6 +239,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, [viewMode, masterPlan, matrixLocations.length]);
 
+  // 🔥 FUNCIÓN ACTUALIZADA PARA USAR EL BACKEND EN EL CÁLCULO DE MATRIZ
   const runMatrixCalculation = async () => {
     if (locations.length < 1)
       return alert("Agrega puntos al mapa o importa desde Excel.");
@@ -247,10 +251,45 @@ export default function App() {
     abortControllerRef.current = ctrl;
 
     setIsProcessing(true);
+    setLogs((prev) => ["🔄 Calculando matriz con el backend...", ...prev]);
+
     try {
+      // Preparar payload para el backend
+      const payload = {
+        ods: { lat: ods.lat, lng: ods.lng },
+        points: locations.map((loc) => ({
+          id: loc.id,
+          name: loc.name,
+          lat: loc.lat,
+          lng: loc.lng,
+          ocCount: loc.ocCount,
+          category: loc.category,
+          ubigeo: loc.ubigeo,
+          active: loc.isActive,
+        })),
+        timeFactor: timeFactor,
+      };
+
+      console.log("📤 Enviando payload de matriz al backend:", payload);
+
+      // 🔥 LLAMAR AL BACKEND PARA CALCULAR LA MATRIZ
+      const response = await calculateMatrixWithBackend(payload, ctrl.signal);
+
+      console.log("📥 Respuesta del backend (matriz):", response);
+
+      // Convertir las matrices del backend al formato del frontend
+      const distMatrix = response.distances.map((row) =>
+        row.map((val) => ({ value: val, loading: false })),
+      );
+
+      const durMatrix = response.durations.map((row) =>
+        row.map((val) => ({ value: val, loading: false })),
+      );
+
+      // Reconstruir matrixLocations desde los labels
       const odsLoc: Location = {
         id: -1,
-        name: "ODS (Base)",
+        name: response.labels[0], // "ODS (Base)"
         coords: odsInput,
         lat: ods.lat,
         lng: ods.lng,
@@ -259,29 +298,32 @@ export default function App() {
         ubigeo: "ODS-MAIN",
         isActive: true,
       };
-      const matrixPoints = [odsLoc, ...locations];
 
-      const { distances, durations } = await fetchOSRMTable(
-        matrixPoints,
-        matrixPoints,
-        ctrl.signal,
-      );
+      const reconstructedLocs = [odsLoc, ...locations];
 
-      setDistanceMatrix(
-        distances.map((row) => row.map((v) => ({ value: v, loading: false }))),
-      );
-      setRawTimeMatrix(durations);
-      setMatrixLocations(matrixPoints);
-      setLogs((prev) => ["✓ Matriz calculada (Datos OSRM).", ...prev]);
+      setDistanceMatrix(distMatrix);
+      setTimeMatrix(durMatrix);
+      setRawTimeMatrix(response.durations);
+      setMatrixLocations(reconstructedLocs);
+
+      setLogs((prev) => [
+        `✓ Matriz calculada exitosamente (${response.labels.length}x${response.labels.length}) desde el backend.`,
+        ...prev,
+      ]);
     } catch (e: any) {
-      if (e.name !== "AbortError")
-        setLogs((prev) => ["❌ Error en Matriz.", ...prev]);
+      if (e.name !== "AbortError") {
+        console.error("❌ Error al calcular matriz:", e);
+        setLogs((prev) => [`❌ Error en Matriz: ${e.message}`, ...prev]);
+        alert(`Error al calcular matriz: ${e.message}`);
+      } else {
+        setLogs((prev) => ["⚠️ Cálculo de matriz cancelado.", ...prev]);
+      }
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // 🔥 FUNCIÓN ACTUALIZADA PARA USAR EL BACKEND
+  // FUNCIÓN PARA OPTIMIZACIÓN (IGUAL QUE ANTES)
   const runMasterPlanOptimization = async () => {
     if (locations.length === 0) return alert("Agrega puntos.");
     const ods = parseCoords(odsInput);
@@ -302,7 +344,6 @@ export default function App() {
     ]);
 
     try {
-      // 🔥 PREPARAR DATOS PARA EL BACKEND
       const payload = {
         ods: { lat: ods.lat, lng: ods.lng },
         points: enabledLocations.slice(0, coverageLimit).map((loc) => ({
@@ -328,18 +369,13 @@ export default function App() {
 
       console.log("📤 Enviando al backend:", payload);
 
-      // 🔥 LLAMAR AL BACKEND
       const response = await optimizeWithBackend(payload, ctrl.signal);
 
       console.log("📥 Respuesta del backend:", response);
 
-      // 🔥 GUARDAR EL SESSION ID
       setSessionId(response.sessionId);
 
-      // 🔥 TRANSFORMAR RESPUESTA DEL BACKEND AL FORMATO DEL FRONTEND
       const transformedRoutes = response.routes.map((route, idx) => {
-        console.log("🔄 Transformando ruta:", route);
-
         return {
           id: route.id || idx + 1,
           name: route.name || `Ruta ${idx + 1}`,
@@ -363,7 +399,8 @@ export default function App() {
             travel_minutes: log.travelMinutes ?? log.travel_minutes ?? 0,
             work_minutes: log.workMinutes ?? log.work_minutes ?? 0,
             overtime_minutes: log.overtimeMinutes ?? log.overtime_minutes ?? 0,
-            total_day_minutes: log.totalDayMinutes ?? log.total_day_minutes ?? 0,
+            total_day_minutes:
+              log.totalDayMinutes ?? log.total_day_minutes ?? 0,
             final_location: log.finalLocation || log.final_location || "",
             is_return: log.isReturn ?? log.is_return ?? false,
             note: log.note || "",
@@ -377,9 +414,6 @@ export default function App() {
         };
       });
 
-      console.log("✅ Rutas transformadas:", transformedRoutes);
-
-      // 🔥 ACTUALIZAR ESTADO
       const masterPlanResult = {
         totalSystemCost: response.totalSystemCost || 0,
         routes: transformedRoutes,
@@ -389,12 +423,10 @@ export default function App() {
         pointsCovered: response.pointsCovered || 0,
       };
 
-      console.log("🎯 Plan Maestro Final:", masterPlanResult);
-
       setMasterPlan(masterPlanResult);
 
       setLogs((prev) => [
-        `✓ Plan generado por el backend: ${response.routes.length} rutas para ${response.pointsCovered} puntos.`,
+        `✓ Plan generado: ${response.routes.length} rutas para ${response.pointsCovered} puntos.`,
         ...prev,
       ]);
     } catch (e: any) {
@@ -417,7 +449,6 @@ export default function App() {
     setIsOptimizing(false);
   };
 
-  // 🔥 FUNCIÓN PARA DESCARGAR EXCEL DESDE EL BACKEND
   const handleDownloadExcel = async () => {
     if (!sessionId) {
       alert("No hay sesión activa. Por favor, genera el plan primero.");
@@ -429,7 +460,10 @@ export default function App() {
       await downloadExcelReport(sessionId);
       setLogs((prev) => ["✓ Excel descargado exitosamente.", ...prev]);
     } catch (error: any) {
-      setLogs((prev) => [`❌ Error al descargar Excel: ${error.message}`, ...prev]);
+      setLogs((prev) => [
+        `❌ Error al descargar Excel: ${error.message}`,
+        ...prev,
+      ]);
       alert(`Error al descargar Excel: ${error.message}`);
     }
   };
@@ -649,12 +683,11 @@ export default function App() {
               Planificador de Rutas ODS
             </h1>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">
-              Cálculo de rutas óptimas - Backend Java + Frontend React
+              Backend Java + Frontend React - Matriz desde Backend
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* INDICADOR DE COBERTURA */}
             <div className="bg-slate-50 px-6 py-2 rounded-2xl border border-slate-100 text-center mr-4">
               <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">
                 Cobertura de Puntos
@@ -702,7 +735,6 @@ export default function App() {
               <MapClickHandler onClick={handleMapClick} />
               <MapSearchControl />
 
-              {/* Marcadores */}
               {locations.map((loc, idx) => (
                 <Marker
                   key={loc.id}
@@ -730,7 +762,6 @@ export default function App() {
                 </Marker>
               ))}
 
-              {/* DIBUJO DE RUTAS DEL PLAN MAESTRO */}
               {masterPlan?.routes?.map((route, routeIdx) => {
                 const positions = route.points
                   .filter((p) => p && p.lat && p.lng)
@@ -773,10 +804,9 @@ export default function App() {
               <div className="space-y-6">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] border-b pb-3 flex justify-between items-center">
                   Configuración del Sistema
-                  <span className="text-sunass-blue">V2.0</span>
+                  <span className="text-sunass-blue">V3.0</span>
                 </h3>
 
-                {/* Input de Coordenadas */}
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 tracking-widest">
                     <i className="fa-solid fa-location-crosshairs mr-1"></i>{" "}
@@ -791,7 +821,6 @@ export default function App() {
                   />
                 </div>
 
-                {/* Configuración de Tiempos */}
                 <div className="grid grid-cols-1 gap-4">
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
@@ -836,7 +865,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Costos y Factores */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 relative">
                     <span className="absolute top-2 right-3 text-[8px] font-black text-slate-300 uppercase">
@@ -910,7 +938,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* BOTONES DE ACCIÓN */}
               <div className="pt-4 space-y-3">
                 <div className="flex p-1 bg-slate-100 rounded-2xl">
                   <button
@@ -985,7 +1012,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* 🔥 BOTÓN EXCEL DEL BACKEND */}
             {viewMode === "optimization" && masterPlan && sessionId && (
               <div className="flex gap-4">
                 <button
@@ -999,7 +1025,6 @@ export default function App() {
             )}
           </div>
 
-          {/* CONTENIDO DE RESULTADOS */}
           <div className="p-10">
             {viewMode === "matrix" && matrixLocations.length > 0 ? (
               <div className="overflow-x-auto rounded-[2rem] border border-slate-200 shadow-sm">
@@ -1037,8 +1062,9 @@ export default function App() {
                               <span className="text-slate-200">--</span>
                             ) : (
                               (activeTab === "distance"
-                                ? distanceMatrix[i]?.[j]?.value
-                                : timeMatrix[i]?.[j]?.value) || "..."
+                                ? distanceMatrix[i]?.[j]?.value?.toFixed(2)
+                                : timeMatrix[i]?.[j]?.value?.toFixed(2)) ||
+                              "..."
                             )}
                           </td>
                         ))}

@@ -7,15 +7,16 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Proxy para todos los endpoints de la API
       "/api": {
         target: "http://localhost:8081",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, "/api"),
+        // No reescribimos la ruta - dejamos /api tal cual
       },
+      // Proxy para reportes
       "/reports": {
         target: "http://localhost:8081",
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/reports/, "/reports"),
       },
     },
   },
