@@ -1,6 +1,8 @@
 package pe.gob.sunass.rutasods.matrix.interfaces.rest;
 
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pe.gob.sunass.rutasods.matrix.application.internal.MatrixService;
 import pe.gob.sunass.rutasods.matrix.interfaces.rest.dto.MatrixRequest;
@@ -21,22 +23,26 @@ public class MatrixController {
     }
 
     @PostMapping("/calculate")
-    public MatrixResponse calculateMatrix(@Valid @RequestBody MatrixRequest request) {
-        
-        // ✅ LOGS DE DEBUG
-        System.out.println("========== MATRIZ CALCULATE REQUEST ==========");
-        System.out.println("ODS recibido: " + request.getOds());
-        System.out.println("Cantidad de puntos: " + (request.getPoints() != null ? request.getPoints().size() : 0));
-        System.out.println("Time Factor: " + request.getTimeFactor());
+    public ResponseEntity<?> calculateMatrix(@Valid @RequestBody MatrixRequest request) {
         
         try {
+            // ✅ LOGS DE DEBUG
+            System.out.println("========== MATRIZ CALCULATE REQUEST ==========");
+            System.out.println("ODS recibido: " + request.getOds());
+            System.out.println("Cantidad de puntos: " + (request.getPoints() != null ? request.getPoints().size() : 0));
+            System.out.println("Time Factor: " + request.getTimeFactor());
+            
             // ✅ VALIDACIÓN DEFENSIVA
             if (request.getOds() == null) {
-                throw new IllegalArgumentException("ODS coordinates are required");
+                return ResponseEntity.badRequest().body("ODS coordinates are required");
+            }
+            
+            if (request.getOds().getLat() == null || request.getOds().getLng() == null) {
+                return ResponseEntity.badRequest().body("ODS lat/lng cannot be null");
             }
             
             if (request.getPoints() == null || request.getPoints().isEmpty()) {
-                throw new IllegalArgumentException("At least one point is required");
+                return ResponseEntity.badRequest().body("At least one point is required");
             }
             
             // 1) Construir ODS como Location
@@ -44,8 +50,8 @@ public class MatrixController {
             Location ods = new Location();
             ods.setId(-1L);
             ods.setName("ODS (Base)");
-            ods.setLat(request.getOds().getLat());  // ✅ Ahora usa getLat()
-            ods.setLng(request.getOds().getLng());  // ✅ Ahora usa getLng()
+            ods.setLat(request.getOds().getLat());
+            ods.setLng(request.getOds().getLng());
             ods.setCoords(request.getOds().getLat() + "," + request.getOds().getLng());
             ods.setCategory(Location.Category.PC);
             ods.setActive(true);
@@ -55,24 +61,29 @@ public class MatrixController {
 
             // 2) Convertir puntos del request a Location
             System.out.println("✅ Convirtiendo puntos...");
-            List<Location> points = request.getPoints()
-                    .stream()
-                    .map(dto -> {
-                        Location loc = new Location();
-                        loc.setId(dto.getId());
-                        loc.setName(dto.getName());
-                        loc.setLat(dto.getLat());
-                        loc.setLng(dto.getLng());
-                        loc.setCoords(dto.getLat() + "," + dto.getLng());
-                        loc.setOcCount(dto.getOcCount() != null ? dto.getOcCount() : 0);
-                        loc.setCategory(dto.getCategory() != null && dto.getCategory().equals("OC") 
-                            ? Location.Category.OC 
-                            : Location.Category.PC);
-                        loc.setUbigeo(dto.getUbigeo() != null ? dto.getUbigeo() : "");
-                        loc.setActive(dto.isActive());
-                        return loc;
-                    })
-                    .toList();
+            List<Location> points = new ArrayList<>();
+            
+            for (MatrixRequest.PointDto dto : request.getPoints()) {
+                if (dto.getLat() == null || dto.getLng() == null) {
+                    System.err.println("⚠️ Punto con coordenadas nulas: " + dto.getName());
+                    continue;
+                }
+                
+                Location loc = new Location();
+                loc.setId(dto.getId());
+                loc.setName(dto.getName());
+                loc.setLat(dto.getLat());
+                loc.setLng(dto.getLng());
+                loc.setCoords(dto.getLat() + "," + dto.getLng());
+                loc.setOcCount(dto.getOcCount() != null ? dto.getOcCount() : 0);
+                loc.setCategory(dto.getCategory() != null && dto.getCategory().equals("OC") 
+                    ? Location.Category.OC 
+                    : Location.Category.PC);
+                loc.setUbigeo(dto.getUbigeo() != null ? dto.getUbigeo() : "");
+                loc.setActive(dto.isActive());
+                
+                points.add(loc);
+            }
             
             System.out.println("✅ Puntos convertidos: " + points.size());
 
@@ -112,7 +123,15 @@ public class MatrixController {
             
             System.out.println("========== MATRIZ CALCULATE SUCCESS ==========");
 
-            return response;
+            return ResponseEntity.ok(response);
+            
+        } catch (IllegalStateException e) {
+            System.err.println("========== ERROR OSRM ==========");
+            System.err.println("Mensaje: " + e.getMessage());
+            e.printStackTrace();
+            System.err.println("================================");
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body("Error comunicándose con OSRM: " + e.getMessage());
             
         } catch (Exception e) {
             System.err.println("========== ERROR EN MATRIZ CALCULATE ==========");
@@ -120,7 +139,8 @@ public class MatrixController {
             System.err.println("Mensaje: " + e.getMessage());
             e.printStackTrace();
             System.err.println("===============================================");
-            throw e;
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error interno: " + e.getMessage());
         }
     }
 }

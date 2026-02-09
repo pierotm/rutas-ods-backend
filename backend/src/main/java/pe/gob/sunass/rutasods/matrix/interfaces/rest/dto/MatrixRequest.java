@@ -1,5 +1,6 @@
 package pe.gob.sunass.rutasods.matrix.interfaces.rest.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -19,10 +20,10 @@ public class MatrixRequest {
     @Data
     public static class OdsDto {
         @NotNull
-        public Double lat;
+        private Double lat;
         
         @NotNull
-        public Double lng;
+        private Double lng;
     }
 
     @Data
@@ -40,6 +41,14 @@ public class MatrixRequest {
         private String category;
         private String ubigeo;
         
-        private boolean isActive; 
+        // ✅ CORRECCIÓN: El frontend envía "active", no "isActive"
+        @JsonProperty("active")
+        private Boolean active;
+        
+        // Getter compatible con el código del controlador
+        public boolean isActive() {
+            return active != null && active;
+        }
     }
+    
 }

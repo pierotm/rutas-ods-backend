@@ -27,19 +27,24 @@ public class OptimizeRequest {
 
     private ConstraintsDto constraints;
 
-    // getters/setters
-
+    // ✅ Clases internas con campos PÚBLICOS para compatibilidad con código existente
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class OdsDto {
         public double lat;
         public double lng;
     }
 
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class CostsDto {
         public double km;
         public double food;
         public double hotel;
     }
 
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ConstraintsDto {
         public Integer maxRouteDays;
         public Integer searchPoolSize;

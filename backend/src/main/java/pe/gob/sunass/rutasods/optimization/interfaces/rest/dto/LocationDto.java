@@ -1,5 +1,6 @@
 package pe.gob.sunass.rutasods.optimization.interfaces.rest.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import pe.gob.sunass.rutasods.shared.domain.model.Location;
 
@@ -8,12 +9,20 @@ public class LocationDto {
 
     private Long id;
     private String name;
-    private double lat;
-    private double lng;
-    private int ocCount;
+    private Double lat;
+    private Double lng;
+    private Integer ocCount;
     private String category;
     private String ubigeo;
-    private boolean active;
+    
+    // ✅ El frontend envía "active", no "isActive"
+    @JsonProperty("active")
+    private Boolean active;
+
+    // ✅ Método para compatibilidad con filtros existentes
+    public boolean isActive() {
+        return active != null && active;
+    }
 
     public Location toDomain() {
 
@@ -24,12 +33,15 @@ public class LocationDto {
         l.setLat(lat);
         l.setLng(lng);
         l.setCoords(lat + "," + lng);
-        l.setOcCount(ocCount);
+        l.setOcCount(ocCount != null ? ocCount : 0);
         l.setUbigeo(ubigeo);
-        l.setActive(active);
+        l.setActive(active != null && active);
 
-        l.setCategory(
-                Location.Category.valueOf(category));
+        if (category != null) {
+            l.setCategory(Location.Category.valueOf(category));
+        } else {
+            l.setCategory(Location.Category.PC);
+        }
 
         return l;
     }
