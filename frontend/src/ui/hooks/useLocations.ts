@@ -3,7 +3,7 @@ import type { Location } from "../../domain/types";
 
 export function useLocations() {
   const [locations, setLocations] = useState<Location[]>([]);
-  const [targetPoints] = useState(100);
+  const [targetPoints] = useState(120);
 
   const addPoint = (lat: number, lng: number) => {
     if (locations.length >= targetPoints) {
