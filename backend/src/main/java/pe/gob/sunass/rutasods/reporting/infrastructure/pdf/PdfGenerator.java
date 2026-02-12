@@ -200,12 +200,12 @@ public class PdfGenerator {
             document.add(routeInfo);
 
             // ==================== TABLA DE ITINERARIO ====================
-            PdfPTable itineraryTable = new PdfPTable(new float[]{1, 3, 4, 3});
+            PdfPTable itineraryTable = new PdfPTable(new float[]{1, 2, 1.5f, 4, 3});
             itineraryTable.setWidthPercentage(100);
             itineraryTable.setSpacingAfter(10);
             
             // Encabezados
-            Stream.of("Día", "Inicio", "Actividades", "Notas")
+            Stream.of("Día", "Inicio", "Ubigeo", "Actividades", "Notas")
                 .forEach(header -> {
                     PdfPCell cell = new PdfPCell(new Phrase(header, HEADER_FONT));
                     cell.setBackgroundColor(SUNASS_BLUE);
@@ -227,6 +227,24 @@ public class PdfGenerator {
                 PdfPCell startCell = new PdfPCell(new Phrase(log.getStartLocation(), NORMAL_FONT));
                 startCell.setPadding(5);
                 itineraryTable.addCell(startCell);
+
+                // UBIGEO
+                String ubigeoStr = "-";
+                if (!log.getActivityPoints().isEmpty()) {
+                    String firstPointName = log.getActivityPoints().get(0);
+                    Location firstPoint = route.getPoints().stream()
+                        .filter(p -> p.getName().equals(firstPointName))
+                        .findFirst()
+                        .orElse(null);
+                    if (firstPoint != null && firstPoint.getUbigeo() != null && !firstPoint.getUbigeo().isEmpty()) {
+                            ubigeoStr = firstPoint.getUbigeo();
+                    }
+                }
+
+                PdfPCell ubigeoCell = new PdfPCell(new Phrase(ubigeoStr, SMALL_FONT));
+                ubigeoCell.setPadding(5);
+                ubigeoCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                itineraryTable.addCell(ubigeoCell);
 
                 // Actividades
                 StringBuilder activities = new StringBuilder();

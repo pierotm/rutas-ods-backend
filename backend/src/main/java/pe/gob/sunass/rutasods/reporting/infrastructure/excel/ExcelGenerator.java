@@ -31,10 +31,10 @@ public class ExcelGenerator {
 
             int rowIdx = 0;
 
-            // Header
+            // Header - ✅ AGREGAMOS COLUMNA UBIGEO
             Row header = sheet.createRow(rowIdx++);
             String[] cols = {
-                    "Ruta", "Día", "Evento",
+                    "Ruta", "Día", "Ubigeo", "Evento",
                     "Detalle", "Duración (min)",
                     "Costo Estimado (S/.)"
             };
@@ -48,6 +48,19 @@ public class ExcelGenerator {
                 for (DayLog log : r.getLogs()) {
 
                     String currentLoc = log.getStartLocation();
+                    
+                    // ✅ Obtener UBIGEO del primer punto del día
+                    String ubigeo = "-";
+                    if (!log.getActivityPoints().isEmpty()) {
+                        String firstPointName = log.getActivityPoints().get(0);
+                        Location firstPoint = r.getPoints().stream()
+                            .filter(p -> p.getName().equals(firstPointName))
+                            .findFirst()
+                            .orElse(null);
+                        if (firstPoint != null && firstPoint.getUbigeo() != null && !firstPoint.getUbigeo().isEmpty()) {
+                            ubigeo = firstPoint.getUbigeo();
+                        }
+                    }
 
                     for (String pName : log.getActivityPoints()) {
 
@@ -61,6 +74,7 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
+                                    ubigeo, // ✅ UBIGEO
                                     "Viaje",
                                     currentLoc + " -> " + pName +
                                             " (" + formatKm(dist) + "km)",
@@ -87,6 +101,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
+                                ubigeo, // ✅ UBIGEO
                                 "Actividad",
                                 pName + " (" + label + ")",
                                 String.valueOf(duration),
@@ -101,6 +116,7 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
+                                    ubigeo, // ✅ UBIGEO
                                     "Org. Comunal (Extra)",
                                     pName + " (Capacitación)",
                                     String.valueOf(ocDuration),
@@ -122,6 +138,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
+                                ubigeo, // ✅ UBIGEO
                                 "Retorno",
                                 currentLoc + " -> ODS (" +
                                         formatKm(dist) + "km)",
@@ -131,6 +148,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
+                                ubigeo, // ✅ UBIGEO
                                 "Viáticos",
                                 "Alimentación Final",
                                 "",
@@ -153,6 +171,7 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
+                                    ubigeo, // ✅ UBIGEO
                                     "Viaje (Pernocte)",
                                     currentLoc + " -> " +
                                             log.getFinalLocation() +
@@ -168,6 +187,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
+                                ubigeo, // ✅ UBIGEO
                                 "Pernocte",
                                 "Hospedaje y Alim. en " +
                                         log.getFinalLocation(),
@@ -198,6 +218,7 @@ public class ExcelGenerator {
             int rowIdx,
             String route,
             int day,
+            String ubigeo, // ✅ NUEVO PARÁMETRO
             String event,
             String detail,
             String duration,
@@ -208,11 +229,12 @@ public class ExcelGenerator {
 
         row.createCell(0).setCellValue(route);
         row.createCell(1).setCellValue(day);
-        row.createCell(2).setCellValue(event);
-        row.createCell(3).setCellValue(detail);
-        row.createCell(4).setCellValue(duration);
+        row.createCell(2).setCellValue(ubigeo); // ✅ COLUMNA UBIGEO
+        row.createCell(3).setCellValue(event);
+        row.createCell(4).setCellValue(detail);
+        row.createCell(5).setCellValue(duration);
 
-        Cell c = row.createCell(5);
+        Cell c = row.createCell(6); // ✅ AJUSTADO ÍNDICE
         c.setCellValue(cost);
 
         return rowIdx;
