@@ -31,7 +31,7 @@ public class ExcelGenerator {
 
             int rowIdx = 0;
 
-            // Header - ✅ AGREGAMOS COLUMNA UBIGEO
+            // Header - ✅ COLUMNA UBIGEO
             Row header = sheet.createRow(rowIdx++);
             String[] cols = {
                     "Ruta", "Día", "Ubigeo", "Evento",
@@ -48,22 +48,10 @@ public class ExcelGenerator {
                 for (DayLog log : r.getLogs()) {
 
                     String currentLoc = log.getStartLocation();
-                    
-                    // ✅ Obtener UBIGEO del primer punto del día
-                    String ubigeo = "-";
-                    if (!log.getActivityPoints().isEmpty()) {
-                        String firstPointName = log.getActivityPoints().get(0);
-                        Location firstPoint = r.getPoints().stream()
-                            .filter(p -> p.getName().equals(firstPointName))
-                            .findFirst()
-                            .orElse(null);
-                        if (firstPoint != null && firstPoint.getUbigeo() != null && !firstPoint.getUbigeo().isEmpty()) {
-                            ubigeo = firstPoint.getUbigeo();
-                        }
-                    }
 
                     for (String pName : log.getActivityPoints()) {
 
+                        // =============== VIAJE ===============
                         if (!pName.equals(currentLoc)) {
                             double dist = findDistance(
                                     currentLoc, pName,
@@ -74,7 +62,7 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
-                                    ubigeo, // ✅ UBIGEO
+                                    "-", // ✅ Sin UBIGEO en viajes
                                     "Viaje",
                                     currentLoc + " -> " + pName +
                                             " (" + formatKm(dist) + "km)",
@@ -84,6 +72,7 @@ public class ExcelGenerator {
                             currentLoc = pName;
                         }
 
+                        // =============== ACTIVIDAD ===============
                         Location pt = r.getPoints().stream()
                                 .filter(p -> p.getName().equals(pName))
                                 .findFirst()
@@ -98,15 +87,22 @@ public class ExcelGenerator {
                                 ? "Gestión OC"
                                 : "Supervisión PC";
 
+                        // ✅ OBTENER UBIGEO del punto actual donde se realiza la actividad
+                        String ubigeo = "-";
+                        if (pt != null && pt.getUbigeo() != null && !pt.getUbigeo().isEmpty()) {
+                            ubigeo = pt.getUbigeo();
+                        }
+
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                ubigeo, // ✅ UBIGEO
+                                ubigeo, // ✅ UBIGEO solo en actividad
                                 "Actividad",
                                 pName + " (" + label + ")",
                                 String.valueOf(duration),
                                 0);
 
+                        // =============== OCs ADICIONALES ===============
                         int ocDone =
                                 log.getActivityOcCounts()
                                         .getOrDefault(pName, 0);
@@ -116,7 +112,7 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
-                                    ubigeo, // ✅ UBIGEO
+                                    ubigeo, // ✅ Mismo UBIGEO para OCs adicionales del mismo punto
                                     "Org. Comunal (Extra)",
                                     pName + " (Capacitación)",
                                     String.valueOf(ocDuration),
@@ -124,7 +120,7 @@ public class ExcelGenerator {
                         }
                     }
 
-                    // Final / Return
+                    // =============== RETORNO / PERNOCTE ===============
                     if (log.isReturn()) {
 
                         double dist = findDistance(
@@ -138,7 +134,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                ubigeo, // ✅ UBIGEO
+                                "-", // ✅ Sin UBIGEO en retornos
                                 "Retorno",
                                 currentLoc + " -> ODS (" +
                                         formatKm(dist) + "km)",
@@ -148,7 +144,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                ubigeo, // ✅ UBIGEO
+                                "-", // ✅ Sin UBIGEO en viáticos
                                 "Viáticos",
                                 "Alimentación Final",
                                 "",
@@ -171,7 +167,7 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
-                                    ubigeo, // ✅ UBIGEO
+                                    "-", // ✅ Sin UBIGEO en viajes de pernocte
                                     "Viaje (Pernocte)",
                                     currentLoc + " -> " +
                                             log.getFinalLocation() +
@@ -187,7 +183,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                ubigeo, // ✅ UBIGEO
+                                "-", // ✅ Sin UBIGEO en pernocte
                                 "Pernocte",
                                 "Hospedaje y Alim. en " +
                                         log.getFinalLocation(),
@@ -218,7 +214,7 @@ public class ExcelGenerator {
             int rowIdx,
             String route,
             int day,
-            String ubigeo, // ✅ NUEVO PARÁMETRO
+            String ubigeo, // ✅ PARÁMETRO UBIGEO
             String event,
             String detail,
             String duration,

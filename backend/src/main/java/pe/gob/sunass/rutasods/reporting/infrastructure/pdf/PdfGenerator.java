@@ -228,7 +228,7 @@ public class PdfGenerator {
                 startCell.setPadding(5);
                 itineraryTable.addCell(startCell);
 
-                // UBIGEO
+                // ✅ UBIGEO - Mostrar el ubigeo del primer punto de actividad
                 String ubigeoStr = "-";
                 if (!log.getActivityPoints().isEmpty()) {
                     String firstPointName = log.getActivityPoints().get(0);
