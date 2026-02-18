@@ -28,7 +28,7 @@ public class PdfGenerator {
     private static final Color SLATE_800 = new Color(30, 41, 59);
     private static final Color EMERALD_600 = new Color(16, 185, 129);
     private static final Color PURPLE_600 = new Color(147, 51, 234);
-    
+
     // Fuentes
     private static final Font TITLE_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20, SUNASS_BLUE);
     private static final Font SUBTITLE_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, SUNASS_BLUE);
@@ -37,34 +37,72 @@ public class PdfGenerator {
     private static final Font NORMAL_FONT = FontFactory.getFont(FontFactory.HELVETICA, 8, SLATE_600);
     private static final Font SMALL_FONT = FontFactory.getFont(FontFactory.HELVETICA, 7, SLATE_400);
     private static final Font METRIC_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, Color.WHITE);
-    
+    private static final Font CONFIG_LABEL_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, SLATE_700);
+    private static final Font CONFIG_VALUE_FONT = FontFactory.getFont(FontFactory.HELVETICA, 8, SLATE_600);
+
     private static final DecimalFormat MONEY_FORMAT = new DecimalFormat("S/ #,##0.00");
     private static final DecimalFormat NUMBER_FORMAT = new DecimalFormat("#,##0.00");
 
+    // 🔥 NUEVOS CAMPOS PARA ALMACENAR CONFIGURACIÓN
+    private double kmCost;
+    private double foodCost;
+    private double hotelCost;
+    private int pcDuration;
+    private int ocDuration;
+    private double timeFactor;
+
     public byte[] generateMasterPlanPdf(MasterPlanResult result) {
+        // Usar valores por defecto si no se han configurado
+        return generateMasterPlanPdf(result, 1.0, 180.0, 570.0, 180, 180, 1.0);
+    }
+
+    /**
+     * 🔥 NUEVO MÉTODO CON PARÁMETROS DE CONFIGURACIÓN
+     */
+    public byte[] generateMasterPlanPdf(
+            MasterPlanResult result,
+            double kmCost,
+            double foodCost,
+            double hotelCost,
+            int pcDuration,
+            int ocDuration,
+            double timeFactor
+    ) {
+        // Guardar configuración para usar en el reporte
+        this.kmCost = kmCost;
+        this.foodCost = foodCost;
+        this.hotelCost = hotelCost;
+        this.pcDuration = pcDuration;
+        this.ocDuration = ocDuration;
+        this.timeFactor = timeFactor;
+
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document document = new Document(PageSize.A4, 30, 30, 30, 30);
             PdfWriter writer = PdfWriter.getInstance(document, out);
-            
+
             // Header/Footer personalizado
             writer.setPageEvent(new PdfPageEventHelper() {
                 @Override
                 public void onEndPage(PdfWriter writer, Document document) {
                     PdfContentByte cb = writer.getDirectContent();
-                    
+
                     // Footer
-                    Phrase footer = new Phrase("Sistema de Gestión ODS • Sunass 2026", 
-                        FontFactory.getFont(FontFactory.HELVETICA, 7, SLATE_400));
+                    Phrase footer = new Phrase("Sistema de Gestión ODS • Sunass 2026",
+                            FontFactory.getFont(FontFactory.HELVETICA, 7, SLATE_400));
                     ColumnText.showTextAligned(cb, Element.ALIGN_CENTER, footer,
-                        (document.right() - document.left()) / 2 + document.leftMargin(),
-                        document.bottom() - 10, 0);
+                            (document.right() - document.left()) / 2 + document.leftMargin(),
+                            document.bottom() - 10, 0);
                 }
             });
-            
+
             document.open();
 
             // ==================== ENCABEZADO PRINCIPAL ====================
             addHeader(document);
+            document.add(new Chunk("\n"));
+
+            // 🔥 ==================== CONFIGURACIÓN UTILIZADA ====================
+            addConfigurationSection(document);
             document.add(new Chunk("\n"));
 
             // ==================== MÉTRICAS PRINCIPALES ====================
@@ -76,7 +114,7 @@ public class PdfGenerator {
 
             document.close();
             return out.toByteArray();
-            
+
         } catch (Exception e) {
             throw new RuntimeException("Error al generar el reporte PDF", e);
         }
@@ -88,8 +126,8 @@ public class PdfGenerator {
         title.setSpacingAfter(5);
         document.add(title);
 
-        Paragraph subtitle = new Paragraph("Optimización Logística de Rutas de Supervisión", 
-            FontFactory.getFont(FontFactory.HELVETICA, 10, SLATE_600));
+        Paragraph subtitle = new Paragraph("Optimización Logística de Rutas de Supervisión",
+                FontFactory.getFont(FontFactory.HELVETICA, 10, SLATE_600));
         subtitle.setAlignment(Element.ALIGN_CENTER);
         subtitle.setSpacingAfter(10);
         document.add(subtitle);
@@ -106,45 +144,121 @@ public class PdfGenerator {
         document.add(line);
     }
 
+    /**
+     * 🔥 NUEVA SECCIÓN: CONFIGURACIÓN UTILIZADA
+     */
+    private void addConfigurationSection(Document document) throws DocumentException {
+        // Título de la sección
+        Paragraph configTitle = new Paragraph("Parámetros de Configuración", SUBTITLE_FONT);
+        configTitle.setSpacingBefore(5);
+        configTitle.setSpacingAfter(8);
+        document.add(configTitle);
+
+        // Tabla de configuración (2 columnas x 4 filas)
+        PdfPTable configTable = new PdfPTable(4);
+        configTable.setWidthPercentage(100);
+        configTable.setSpacingAfter(10);
+        configTable.setWidths(new float[]{1.5f, 1f, 1.5f, 1f});
+
+        // Fila 1: Costos
+        addConfigCell(configTable, "Costo por Kilómetro:", MONEY_FORMAT.format(kmCost));
+        addConfigCell(configTable, "Costo Alimentación:", MONEY_FORMAT.format(foodCost));
+
+        // Fila 2: Duraciones
+        addConfigCell(configTable, "Duración Supervisión PC:", pcDuration + " minutos (" + (pcDuration/60.0) + " hrs)");
+        addConfigCell(configTable, "Duración Gestión OC:", ocDuration + " minutos (" + (ocDuration/60.0) + " hrs)");
+
+        // Fila 3: Hospedaje y Jornada
+        addConfigCell(configTable, "Costo Hospedaje:", MONEY_FORMAT.format(hotelCost));
+        addConfigCell(configTable, "Jornada Máxima:", "540 min (9 hrs)");
+
+        // 🔥 Fila 4: Time Factor y Límite Extendido
+        addConfigCell(configTable, "Factor de Tiempo:", String.format("%.2fx", timeFactor));
+        addConfigCell(configTable, "Límite Extendido (Retorno):", "660 min (11 hrs)");
+
+        document.add(configTable);
+
+        // Nota informativa
+        Paragraph note = new Paragraph(
+                "Nota: Estos parámetros fueron utilizados para calcular los costos, tiempos y configuración de las rutas presentadas en este informe. " +
+                        "El Factor de Tiempo (" + String.format("%.2fx", timeFactor) + ") se aplicó a todos los tiempos de viaje calculados.",
+                FontFactory.getFont(FontFactory.HELVETICA, 7, SLATE_400)
+        );
+        note.setAlignment(Element.ALIGN_JUSTIFIED);
+        note.setSpacingAfter(5);
+        document.add(note);
+
+        // Línea separadora
+        PdfPTable line = new PdfPTable(1);
+        line.setWidthPercentage(100);
+        line.setSpacingAfter(5);
+        PdfPCell lineCell = new PdfPCell();
+        lineCell.setBorder(Rectangle.BOTTOM);
+        lineCell.setBorderColorBottom(SLATE_200);
+        lineCell.setBorderWidthBottom(1);
+        lineCell.setFixedHeight(1);
+        line.addCell(lineCell);
+        document.add(line);
+    }
+
+    /**
+     * Helper para agregar celdas de configuración
+     */
+    private void addConfigCell(PdfPTable table, String label, String value) {
+        // Celda de etiqueta
+        PdfPCell labelCell = new PdfPCell(new Phrase(label, CONFIG_LABEL_FONT));
+        labelCell.setBorder(Rectangle.NO_BORDER);
+        labelCell.setPadding(4);
+        labelCell.setBackgroundColor(SLATE_50);
+        table.addCell(labelCell);
+
+        // Celda de valor
+        PdfPCell valueCell = new PdfPCell(new Phrase(value, CONFIG_VALUE_FONT));
+        valueCell.setBorder(Rectangle.NO_BORDER);
+        valueCell.setPadding(4);
+        valueCell.setBackgroundColor(Color.WHITE);
+        table.addCell(valueCell);
+    }
+
     private void addMetricsSection(Document document, MasterPlanResult result) throws DocumentException {
         // Calcular métricas adicionales
         int pcCount = result.getRoutes().stream()
-            .mapToInt(r -> (int) r.getPoints().stream()
-                .filter(p -> p.getCategory() == Location.Category.PC).count())
-            .sum();
-            
+                .mapToInt(r -> (int) r.getPoints().stream()
+                        .filter(p -> p.getCategory() == Location.Category.PC).count())
+                .sum();
+
         int ocCount = result.getRoutes().stream()
-            .mapToInt(r -> (int) r.getPoints().stream()
-                .filter(p -> p.getCategory() == Location.Category.OC).count())
-            .sum();
+                .mapToInt(r -> (int) r.getPoints().stream()
+                        .filter(p -> p.getCategory() == Location.Category.OC).count())
+                .sum();
 
         // Tabla de métricas (3 columnas x 2 filas)
         PdfPTable metricsTable = new PdfPTable(3);
         metricsTable.setWidthPercentage(100);
         metricsTable.setSpacingAfter(15);
-        
+
         // Fila 1
-        addMetricCard(metricsTable, "Costo Total Sistema", 
-            MONEY_FORMAT.format(result.getTotalSystemCost()), 
-            result.getPointsCovered() + " puntos", SUNASS_BLUE);
-        addMetricCard(metricsTable, "Rutas Generadas", 
-            String.valueOf(result.getRoutes().size()), 
-            "Flota requerida", SLATE_700);
-        addMetricCard(metricsTable, "Puntos PC", 
-            String.valueOf(pcCount), 
-            "Cubiertos", SUNASS_BLUE);
-        
+        addMetricCard(metricsTable, "Costo Total Sistema",
+                MONEY_FORMAT.format(result.getTotalSystemCost()),
+                result.getPointsCovered() + " puntos", SUNASS_BLUE);
+        addMetricCard(metricsTable, "Rutas Generadas",
+                String.valueOf(result.getRoutes().size()),
+                "Flota requerida", SLATE_700);
+        addMetricCard(metricsTable, "Puntos PC",
+                String.valueOf(pcCount),
+                "Cubiertos", SUNASS_BLUE);
+
         // Fila 2
-        addMetricCard(metricsTable, "Puntos OC", 
-            String.valueOf(ocCount), 
-            "Cubiertos", PURPLE_600);
-        addMetricCard(metricsTable, "Distancia Total", 
-            NUMBER_FORMAT.format(result.getTotalDistance()) + " km", 
-            "", SLATE_700);
-        addMetricCard(metricsTable, "Total Noches", 
-            String.valueOf(result.getTotalNights()), 
-            "", SLATE_700);
-        
+        addMetricCard(metricsTable, "Puntos OC",
+                String.valueOf(ocCount),
+                "Cubiertos", PURPLE_600);
+        addMetricCard(metricsTable, "Distancia Total",
+                NUMBER_FORMAT.format(result.getTotalDistance()) + " km",
+                "", SLATE_700);
+        addMetricCard(metricsTable, "Total Noches",
+                String.valueOf(result.getTotalNights()),
+                "", SLATE_700);
+
         document.add(metricsTable);
     }
 
@@ -153,19 +267,19 @@ public class PdfGenerator {
         card.setPadding(8);
         card.setBorderColor(SLATE_200);
         card.setBorderWidth(1);
-        
+
         // Crear contenido interno
-        Paragraph labelP = new Paragraph(label, 
-            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7, SLATE_400));
+        Paragraph labelP = new Paragraph(label,
+                FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7, SLATE_400));
         labelP.setSpacingAfter(3);
-        
-        Paragraph valueP = new Paragraph(value, 
-            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, color));
+
+        Paragraph valueP = new Paragraph(value,
+                FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, color));
         valueP.setSpacingAfter(2);
-        
+
         if (!subtitle.isEmpty()) {
-            Paragraph subtitleP = new Paragraph(subtitle, 
-                FontFactory.getFont(FontFactory.HELVETICA, 6, SLATE_400));
+            Paragraph subtitleP = new Paragraph(subtitle,
+                    FontFactory.getFont(FontFactory.HELVETICA, 6, SLATE_400));
             card.addElement(labelP);
             card.addElement(valueP);
             card.addElement(subtitleP);
@@ -173,13 +287,13 @@ public class PdfGenerator {
             card.addElement(labelP);
             card.addElement(valueP);
         }
-        
+
         table.addCell(card);
     }
 
     private void addRoutesSection(Document document, MasterPlanResult result) throws DocumentException {
         int routeIndex = 1;
-        
+
         for (RouteSegment route : result.getRoutes()) {
             // ==================== HEADER DE RUTA ====================
             Paragraph routeTitle = new Paragraph("RUTA " + routeIndex + ": " + route.getName(), SUBTITLE_FONT);
@@ -189,12 +303,12 @@ public class PdfGenerator {
 
             // Info resumen de la ruta
             Paragraph routeInfo = new Paragraph(
-                String.format("Duración: %d días / %d noches | Distancia: %.0f km | Costo: %s", 
-                    route.getDays(), 
-                    route.getNights(), 
-                    route.getDistance(),
-                    MONEY_FORMAT.format(route.getTotalCost())),
-                BOLD_FONT
+                    String.format("Duración: %d días / %d noches | Distancia: %.0f km | Costo: %s",
+                            route.getDays(),
+                            route.getNights(),
+                            route.getDistance(),
+                            MONEY_FORMAT.format(route.getTotalCost())),
+                    BOLD_FONT
             );
             routeInfo.setSpacingAfter(8);
             document.add(routeInfo);
@@ -203,16 +317,16 @@ public class PdfGenerator {
             PdfPTable itineraryTable = new PdfPTable(new float[]{1, 2, 1.5f, 4, 3});
             itineraryTable.setWidthPercentage(100);
             itineraryTable.setSpacingAfter(10);
-            
+
             // Encabezados
             Stream.of("Día", "Inicio", "Ubigeo", "Actividades", "Notas")
-                .forEach(header -> {
-                    PdfPCell cell = new PdfPCell(new Phrase(header, HEADER_FONT));
-                    cell.setBackgroundColor(SUNASS_BLUE);
-                    cell.setPadding(6);
-                    cell.setHorizontalAlignment(Element.ALIGN_CENTER);
-                    itineraryTable.addCell(cell);
-                });
+                    .forEach(header -> {
+                        PdfPCell cell = new PdfPCell(new Phrase(header, HEADER_FONT));
+                        cell.setBackgroundColor(SUNASS_BLUE);
+                        cell.setPadding(6);
+                        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+                        itineraryTable.addCell(cell);
+                    });
 
             // Contenido
             for (DayLog log : route.getLogs()) {
@@ -233,11 +347,11 @@ public class PdfGenerator {
                 if (!log.getActivityPoints().isEmpty()) {
                     String firstPointName = log.getActivityPoints().get(0);
                     Location firstPoint = route.getPoints().stream()
-                        .filter(p -> p.getName().equals(firstPointName))
-                        .findFirst()
-                        .orElse(null);
+                            .filter(p -> p.getName().equals(firstPointName))
+                            .findFirst()
+                            .orElse(null);
                     if (firstPoint != null && firstPoint.getUbigeo() != null && !firstPoint.getUbigeo().isEmpty()) {
-                            ubigeoStr = firstPoint.getUbigeo();
+                        ubigeoStr = firstPoint.getUbigeo();
                     }
                 }
 
@@ -249,44 +363,44 @@ public class PdfGenerator {
                 // Actividades
                 StringBuilder activities = new StringBuilder();
                 activities.append(log.getStartLocation()).append(" → ");
-                
+
                 for (int i = 0; i < log.getActivityPoints().size(); i++) {
                     String point = log.getActivityPoints().get(i);
                     activities.append(point);
-                    
+
                     // Agregar badge de OC si hay
                     Integer ocCount = log.getActivityOcCounts().get(point);
                     if (ocCount != null && ocCount > 0) {
                         activities.append(" (+").append(ocCount).append(" OC)");
                     }
-                    
+
                     if (i < log.getActivityPoints().size() - 1) {
                         activities.append(" → ");
                     }
                 }
-                
+
                 if (log.isReturn()) {
                     activities.append(" → ODS ✓");
                 }
-                
+
                 PdfPCell activitiesCell = new PdfPCell(new Phrase(activities.toString(), NORMAL_FONT));
                 activitiesCell.setPadding(5);
                 itineraryTable.addCell(activitiesCell);
 
                 // Notas
-                String noteText = log.isReturn() 
-                    ? "Retorno exitoso" 
-                    : (log.getNote() != null ? log.getNote() : "-");
-                    
+                String noteText = log.isReturn()
+                        ? "Retorno exitoso"
+                        : (log.getNote() != null ? log.getNote() : "-");
+
                 if (log.getOvertimeMinutes() > 0) {
                     noteText += String.format(" (Sobretiempo: %d min)", log.getOvertimeMinutes());
                 }
-                
+
                 PdfPCell noteCell = new PdfPCell(new Phrase(noteText, SMALL_FONT));
                 noteCell.setPadding(5);
                 itineraryTable.addCell(noteCell);
             }
-            
+
             document.add(itineraryTable);
 
             // ==================== DESGLOSE DE COSTOS ====================
@@ -296,13 +410,13 @@ public class PdfGenerator {
             document.add(costBreakdown);
 
             Paragraph costs = new Paragraph(
-                String.format("Combustible: %s | Alimentación: %s | Alojamiento: %s | OC: %s",
-                    MONEY_FORMAT.format(route.getBreakdown().getGas()),
-                    MONEY_FORMAT.format(route.getBreakdown().getFood()),
-                    MONEY_FORMAT.format(route.getBreakdown().getHotel()),
-                    MONEY_FORMAT.format(route.getBreakdown().getOc())
-                ),
-                NORMAL_FONT
+                    String.format("Combustible: %s | Alimentación: %s | Alojamiento: %s | OC: %s",
+                            MONEY_FORMAT.format(route.getBreakdown().getGas()),
+                            MONEY_FORMAT.format(route.getBreakdown().getFood()),
+                            MONEY_FORMAT.format(route.getBreakdown().getHotel()),
+                            MONEY_FORMAT.format(route.getBreakdown().getOc())
+                    ),
+                    NORMAL_FONT
             );
             costs.setSpacingAfter(15);
             document.add(costs);

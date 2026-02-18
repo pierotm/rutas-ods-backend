@@ -21,5 +21,7 @@ public record OptimizationSnapshot(
         int pcDuration,
         int ocDuration,
 
+        double timeFactor, // 🔥 NUEVO CAMPO
+
         Instant createdAt
 ) {}

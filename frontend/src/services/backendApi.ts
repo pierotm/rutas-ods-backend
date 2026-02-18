@@ -112,7 +112,7 @@ export async function optimizeWithBackend(
 export async function downloadExcelReport(sessionId: string): Promise<void> {
   try {
     const res = await fetch(`/api/reports/plan-maestro/excel/${sessionId}`);
-    
+
     if (!res.ok) {
       throw new Error(`Error al descargar Excel: ${res.status}`);
     }
@@ -131,3 +131,31 @@ export async function downloadExcelReport(sessionId: string): Promise<void> {
     throw error;
   }
 }
+  /**
+   * 🔥 NUEVA FUNCIÓN: Descarga la matriz de distancias y tiempos en Excel
+   * @param sessionId ID de la sesión de optimización
+   */
+  export async function downloadMatrixExcel(sessionId: string): Promise<void> {
+    try {
+      const res = await fetch(`/api/reports/matriz/excel/${sessionId}`);
+
+      if (!res.ok) {
+        throw new Error(`Error al descargar matriz: ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "matriz_distancias_tiempos.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error descargando matriz:", error);
+      throw error;
+    }
+  }
+
+

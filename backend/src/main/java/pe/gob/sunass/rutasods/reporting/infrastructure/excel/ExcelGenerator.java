@@ -31,7 +31,7 @@ public class ExcelGenerator {
 
             int rowIdx = 0;
 
-            // Header - ✅ COLUMNA UBIGEO
+            // Header
             Row header = sheet.createRow(rowIdx++);
             String[] cols = {
                     "Ruta", "Día", "Ubigeo", "Evento",
@@ -49,6 +49,22 @@ public class ExcelGenerator {
 
                     String currentLoc = log.getStartLocation();
 
+                    // 🔥 CALCULAR TIEMPO PROMEDIO POR SEGMENTO DE VIAJE
+                    int totalTravelMinutes = log.getTravelMinutes();
+                    int travelSegments = countTravelSegments(log);
+
+                    // Si hay retorno, excluir ese segmento del cálculo promedio
+                    int adjustedTravelMinutes = totalTravelMinutes;
+                    if (log.isReturn()) {
+                        // El último segmento es el retorno, lo manejaremos aparte
+                        travelSegments = Math.max(1, travelSegments - 1);
+                    }
+
+                    // Tiempo promedio por segmento de viaje
+                    int avgTravelTime = travelSegments > 0
+                            ? adjustedTravelMinutes / travelSegments
+                            : 0;
+
                     for (String pName : log.getActivityPoints()) {
 
                         // =============== VIAJE ===============
@@ -62,11 +78,11 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
-                                    "-", // ✅ Sin UBIGEO en viajes
+                                    "-",
                                     "Viaje",
                                     currentLoc + " -> " + pName +
                                             " (" + formatKm(dist) + "km)",
-                                    "",
+                                    String.valueOf(avgTravelTime), // 🔥 TIEMPO DE VIAJE
                                     gasCost);
 
                             currentLoc = pName;
@@ -87,7 +103,7 @@ public class ExcelGenerator {
                                 ? "Gestión OC"
                                 : "Supervisión PC";
 
-                        // ✅ OBTENER UBIGEO del punto actual donde se realiza la actividad
+                        // ✅ OBTENER UBIGEO
                         String ubigeo = "-";
                         if (pt != null && pt.getUbigeo() != null && !pt.getUbigeo().isEmpty()) {
                             ubigeo = pt.getUbigeo();
@@ -96,7 +112,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                ubigeo, // ✅ UBIGEO solo en actividad
+                                ubigeo,
                                 "Actividad",
                                 pName + " (" + label + ")",
                                 String.valueOf(duration),
@@ -112,7 +128,7 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
-                                    ubigeo, // ✅ Mismo UBIGEO para OCs adicionales del mismo punto
+                                    ubigeo,
                                     "Org. Comunal (Extra)",
                                     pName + " (Capacitación)",
                                     String.valueOf(ocDuration),
@@ -131,20 +147,26 @@ public class ExcelGenerator {
 
                         double gasCost = dist * kmCost;
 
+                        // 🔥 CALCULAR TIEMPO DE RETORNO
+                        // Si conocemos el total de viaje y los segmentos previos,
+                        // el retorno es lo que queda
+                        int returnTime = totalTravelMinutes - (avgTravelTime * (travelSegments));
+                        returnTime = Math.max(0, returnTime); // No permitir negativos
+
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                "-", // ✅ Sin UBIGEO en retornos
+                                "-",
                                 "Retorno",
                                 currentLoc + " -> ODS (" +
                                         formatKm(dist) + "km)",
-                                "",
+                                String.valueOf(returnTime), // 🔥 TIEMPO DE RETORNO
                                 gasCost);
 
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                "-", // ✅ Sin UBIGEO en viáticos
+                                "-",
                                 "Viáticos",
                                 "Alimentación Final",
                                 "",
@@ -167,12 +189,12 @@ public class ExcelGenerator {
                             rowIdx = addRow(sheet, rowIdx,
                                     r.getName(),
                                     log.getDay(),
-                                    "-", // ✅ Sin UBIGEO en viajes de pernocte
+                                    "-",
                                     "Viaje (Pernocte)",
                                     currentLoc + " -> " +
                                             log.getFinalLocation() +
                                             " (" + formatKm(dist) + "km)",
-                                    "",
+                                    String.valueOf(avgTravelTime), // 🔥 TIEMPO DE VIAJE
                                     gasCost);
 
                             currentLoc = log.getFinalLocation();
@@ -183,7 +205,7 @@ public class ExcelGenerator {
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
-                                "-", // ✅ Sin UBIGEO en pernocte
+                                "-",
                                 "Pernocte",
                                 "Hospedaje y Alim. en " +
                                         log.getFinalLocation(),
@@ -214,7 +236,7 @@ public class ExcelGenerator {
             int rowIdx,
             String route,
             int day,
-            String ubigeo, // ✅ PARÁMETRO UBIGEO
+            String ubigeo,
             String event,
             String detail,
             String duration,
@@ -225,12 +247,12 @@ public class ExcelGenerator {
 
         row.createCell(0).setCellValue(route);
         row.createCell(1).setCellValue(day);
-        row.createCell(2).setCellValue(ubigeo); // ✅ COLUMNA UBIGEO
+        row.createCell(2).setCellValue(ubigeo);
         row.createCell(3).setCellValue(event);
         row.createCell(4).setCellValue(detail);
         row.createCell(5).setCellValue(duration);
 
-        Cell c = row.createCell(6); // ✅ AJUSTADO ÍNDICE
+        Cell c = row.createCell(6);
         c.setCellValue(cost);
 
         return rowIdx;
@@ -252,6 +274,36 @@ public class ExcelGenerator {
             return matrix[i1][i2];
         }
         return 0;
+    }
+
+    /**
+     * 🔥 NUEVO MÉTODO: Cuenta la cantidad de segmentos de viaje en un día
+     * Un segmento es cada transición entre ubicaciones diferentes
+     */
+    private int countTravelSegments(DayLog log) {
+        int segments = 0;
+
+        // Contar viajes entre puntos de actividad
+        String currentLoc = log.getStartLocation();
+        for (String activityPoint : log.getActivityPoints()) {
+            if (!activityPoint.equals(currentLoc)) {
+                segments++;
+                currentLoc = activityPoint;
+            }
+        }
+
+        // Contar viaje de pernocte si existe
+        if (!log.isReturn() && log.getFinalLocation() != null
+                && !log.getFinalLocation().equals(currentLoc)) {
+            segments++;
+        }
+
+        // Contar retorno si existe
+        if (log.isReturn()) {
+            segments++;
+        }
+
+        return Math.max(1, segments); // Mínimo 1 para evitar división por cero
     }
 
     private String formatKm(double v) {

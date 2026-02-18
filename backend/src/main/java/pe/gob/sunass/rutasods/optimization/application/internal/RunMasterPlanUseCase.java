@@ -192,6 +192,11 @@ public class RunMasterPlanUseCase {
                                 ? request.getOcDuration()
                                 : 180,
 
+                        // 🔥 NUEVO PARÁMETRO: timeFactor
+                        request.getTimeFactor() != null
+                                ? request.getTimeFactor()
+                                : 1.0,
+
                         Instant.now()
                 );
 

@@ -25,7 +25,9 @@ import { downloadMasterCSV, downloadMasterPDF } from "./services/export";
 import {
   optimizeWithBackend,
   downloadExcelReport,
+  downloadMatrixExcel,
 } from "./services/backendApi";
+
 import { calculateMatrixWithBackend } from "./services/matrixApi";
 
 export default function App() {
@@ -232,6 +234,26 @@ export default function App() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  // 2. CREAR HANDLER PARA DESCARGAR MATRIZ (agregar junto a handleDownloadExcel):
+  const handleDownloadMatrix = async () => {
+    if (!sessionId) {
+      alert("No hay sesión activa. Por favor, genera el plan primero.");
+      return;
+    }
+
+    try {
+      setLogs((prev) => ["📥 Descargando matriz desde el backend...", ...prev]);
+      await downloadMatrixExcel(sessionId);
+      setLogs((prev) => ["✓ Matriz descargada exitosamente.", ...prev]);
+    } catch (error: any) {
+      setLogs((prev) => [
+        `❌ Error al descargar matriz: ${error.message}`,
+        ...prev,
+      ]);
+      alert(`Error al descargar matriz: ${error.message}`);
+    }
   };
 
   useEffect(() => {
@@ -1070,21 +1092,29 @@ export default function App() {
             </div>
 
             {viewMode === "optimization" && masterPlan && sessionId && (
-              <div className="flex gap-4">
-                <button
-                  onClick={handleDownloadPDF}
-                  className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl hover:-translate-y-1 active:translate-y-0 flex items-center gap-3"
-                >
-                  <i className="fa-solid fa-file-pdf text-sm"></i> PDF
-                </button>
-                <button
-                  onClick={handleDownloadExcel}
-                  className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
-                >
-                  <i className="fa-solid fa-file-excel mr-2"></i>
-                  Excel
-                </button>
-              </div>
+                <div className="flex gap-4">
+                  <button
+                      onClick={handleDownloadPDF}
+                      className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl hover:-translate-y-1 active:translate-y-0 flex items-center gap-3"
+                  >
+                    <i className="fa-solid fa-file-pdf text-sm"></i> PDF
+                  </button>
+                  <button
+                      onClick={handleDownloadExcel}
+                      className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+                  >
+                    <i className="fa-solid fa-file-excel mr-2"></i>
+                    Plan Excel
+                  </button>
+                  {/* 🔥 NUEVO BOTÓN DE MATRIZ */}
+                  <button
+                      onClick={handleDownloadMatrix}
+                      className="px-8 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+                  >
+                    <i className="fa-solid fa-table mr-2"></i>
+                    Matriz Excel
+                  </button>
+                </div>
             )}
           </div>
 

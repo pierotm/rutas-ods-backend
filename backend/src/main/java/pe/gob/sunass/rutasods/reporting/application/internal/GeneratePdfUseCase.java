@@ -25,12 +25,20 @@ public class GeneratePdfUseCase {
     public byte[] execute(String sessionId) {
         // Obtener snapshot desde el cache
         OptimizationSnapshot snapshot = cacheService.getOrThrow(sessionId);
-        
+
         // Construir MasterPlanResult desde el snapshot
         MasterPlanResult result = buildMasterPlanResult(snapshot);
-        
-        // Generar PDF
-        return pdfGenerator.generateMasterPlanPdf(result);
+
+        // 🔥 GENERAR PDF CON CONFIGURACIÓN (incluyendo timeFactor)
+        return pdfGenerator.generateMasterPlanPdf(
+                result,
+                snapshot.kmCost(),
+                snapshot.foodCost(),
+                snapshot.hotelCost(),
+                snapshot.pcDuration(),
+                snapshot.ocDuration(),
+                snapshot.timeFactor()
+        );
     }
 
     /**
@@ -38,28 +46,28 @@ public class GeneratePdfUseCase {
      */
     private MasterPlanResult buildMasterPlanResult(OptimizationSnapshot snapshot) {
         MasterPlanResult result = new MasterPlanResult();
-        
+
         // Calcular totales
         double totalSystemCost = snapshot.routes().stream()
-            .mapToDouble(r -> r.getTotalCost())
-            .sum();
-            
+                .mapToDouble(r -> r.getTotalCost())
+                .sum();
+
         double totalDistance = snapshot.routes().stream()
-            .mapToDouble(r -> r.getDistance())
-            .sum();
-            
+                .mapToDouble(r -> r.getDistance())
+                .sum();
+
         int totalNights = snapshot.routes().stream()
-            .mapToInt(r -> r.getNights())
-            .sum();
-            
+                .mapToInt(r -> r.getNights())
+                .sum();
+
         int totalDays = snapshot.routes().stream()
-            .mapToInt(r -> r.getDays())
-            .sum();
-            
+                .mapToInt(r -> r.getDays())
+                .sum();
+
         int pointsCovered = snapshot.routes().stream()
-            .mapToInt(r -> r.getPoints().size())
-            .sum();
-        
+                .mapToInt(r -> r.getPoints().size())
+                .sum();
+
         // Configurar resultado
         result.setTotalSystemCost(totalSystemCost);
         result.setRoutes(snapshot.routes());
@@ -67,7 +75,7 @@ public class GeneratePdfUseCase {
         result.setTotalNights(totalNights);
         result.setTotalDays(totalDays);
         result.setPointsCovered(pointsCovered);
-        
+
         return result;
     }
 }
