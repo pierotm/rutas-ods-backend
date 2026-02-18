@@ -5,8 +5,16 @@ import pe.gob.sunass.rutasods.shared.domain.rules.RoutingRules;
 
 import java.util.*;
 
+/**
+ * Calcula el itinerario día a día para una ruta dada.
+ *
+ * REGLAS DE PERNOCTE:
+ *  - Solo se puede pernoctar en un punto de categoría PC.
+ *  - NO se puede pernoctar en la ODS (índice 0, origen/retorno final).
+ *  - NO se puede pernoctar en una OC; en ese caso se busca la PC más cercana.
+ *  - La ODS es únicamente el punto de retorno al final del viaje.
+ */
 public class ItineraryCalculator {
-    private static final int OVERTIME_FOR_PERNOCTE = 60;
 
     public ItineraryResult calculate(
             List<Integer> pathIndices,
@@ -19,12 +27,11 @@ public class ItineraryCalculator {
         int currentDay = 1;
         int currentTime = 0;
 
-        int currentLocIdx = pathIndices.get(0);
+        int currentLocIdx = pathIndices.get(0); // siempre es el ODS (índice 0)
         int nights = 0;
 
         List<DayLog> logs = new ArrayList<>();
 
-        // El primer punto es siempre el origen (Base ODS)
         DayLog currentLog = startNewDay(currentDay, allPoints.get(currentLocIdx).getName());
 
         List<Integer> activitiesIndices = pathIndices.subList(1, pathIndices.size());
@@ -33,49 +40,45 @@ public class ItineraryCalculator {
             Location targetPoint = allPoints.get(targetIdx);
             int travelTime = (int) timeMatrix[currentLocIdx][targetIdx];
 
-            // 1. Validar si el viaje al siguiente punto obliga a cerrar el día
+            // ── 1. ¿El viaje al siguiente punto desborda la jornada? ──────────────
             if (currentTime > 0 && (currentTime + travelTime) > RoutingRules.MAX_WORK_DAY) {
 
-                // 🔥 NUEVA LÓGICA: VERIFICAR SI LA UBICACIÓN ACTUAL ES PC O OC
                 Location currentLocation = allPoints.get(currentLocIdx);
 
-                if (currentLocation.getCategory() == Location.Category.OC) {
-                    // ❌ NO se puede pernoctar en OC
+                if (currentLocation.getCategory() == Location.Category.OC
+                        || currentLocIdx == 0) {
+                    // Ubicación actual es OC (o, por seguridad, ODS): buscar PC para pernoctar
+                    Integer pcIdx = findNearestPcForOvernight(
+                            allPoints, pathIndices, currentLocIdx, timeMatrix);
 
-                    // 🔥 BUSCAR PC: Primero en el día, luego en radio de 5km
-                    Integer pcForOvernightIdx = findPcForOvernight(
-                            currentLog, allPoints, pathIndices,
-                            currentLocIdx, timeMatrix);
+                    if (pcIdx != null) {
+                        int travelToPc = (int) timeMatrix[currentLocIdx][pcIdx];
+                        currentTime += travelToPc;
+                        currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelToPc);
 
-                    if (pcForOvernightIdx != null) {
-                        // Retroceder/viajar al PC para pernoctar
-                        int travelTimeToPc = (int) timeMatrix[currentLocIdx][pcForOvernightIdx];
-                        currentTime += travelTimeToPc;
-                        currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelTimeToPc);
-
-                        closeDay(currentLog, allPoints.get(pcForOvernightIdx).getName(),
-                                "Pernocte en PC cercana (no se permite pernoctar en OC).",
+                        closeDay(currentLog,
+                                allPoints.get(pcIdx).getName(),
+                                "Pernocte en PC cercana (no se permite pernoctar en OC ni en ODS).",
                                 currentTime);
-
                         logs.add(currentLog);
                         nights++;
                         currentDay++;
                         currentTime = 0;
 
-                        // Nuevo día empieza en el PC donde se pernoctó
-                        currentLog = startNewDay(currentDay, allPoints.get(pcForOvernightIdx).getName());
+                        // El nuevo día arranca desde la PC donde se pernoctó
+                        currentLog = startNewDay(currentDay, allPoints.get(pcIdx).getName());
 
-                        // Viajar del PC al punto OC donde estábamos
-                        int travelFromPcToCurrentOc = (int) timeMatrix[pcForOvernightIdx][currentLocIdx];
-                        currentTime += travelFromPcToCurrentOc;
-                        currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelFromPcToCurrentOc);
+                        // Viajar de vuelta al punto OC donde estábamos
+                        int travelBackToOc = (int) timeMatrix[pcIdx][currentLocIdx];
+                        currentTime += travelBackToOc;
+                        currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelBackToOc);
 
                     } else {
-                        // ⚠️ CASO EXCEPCIONAL: No hay PC disponible dentro del radio
-                        closeDay(currentLog, allPoints.get(currentLocIdx).getName(),
-                                "⚠️ EXCEPCIÓN: Pernocte en OC (no hay PC disponible).",
+                        // Sin PC disponible en ningún punto de la ruta → excepción inevitable
+                        closeDay(currentLog,
+                                allPoints.get(currentLocIdx).getName(),
+                                "⚠️ EXCEPCIÓN: Sin PC disponible; pernocte forzado en OC.",
                                 currentTime);
-
                         logs.add(currentLog);
                         nights++;
                         currentDay++;
@@ -84,11 +87,11 @@ public class ItineraryCalculator {
                     }
 
                 } else {
-                    // ✅ La ubicación actual es PC, se puede pernoctar aquí
-                    closeDay(currentLog, allPoints.get(currentLocIdx).getName(),
+                    // Ubicación actual es PC → pernocte normal
+                    closeDay(currentLog,
+                            allPoints.get(currentLocIdx).getName(),
                             "Pernocte en PC por jornada extendida.",
                             currentTime);
-
                     logs.add(currentLog);
                     nights++;
                     currentDay++;
@@ -97,62 +100,54 @@ public class ItineraryCalculator {
                 }
             }
 
-            // Sumar tiempo de viaje
+            // ── 2. Sumar tiempo de viaje al punto objetivo ────────────────────────
             currentTime += travelTime;
             currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelTime);
             currentLocIdx = targetIdx;
 
-            // 2. Determinar duración de actividades en el punto
-            int baseDuration = targetPoint.getCategory() == Location.Category.OC ? ocDuration : pcDuration;
+            // ── 3. Procesar tareas en el punto objetivo ───────────────────────────
+            int baseDuration = (targetPoint.getCategory() == Location.Category.OC)
+                    ? ocDuration : pcDuration;
 
             List<Integer> tasks = new ArrayList<>();
             tasks.add(baseDuration);
-            // Agregar OCs adicionales si existen
             for (int k = 1; k < targetPoint.getOcCount(); k++) {
                 tasks.add(ocDuration);
             }
 
-            // 3. Procesar tareas en el punto (puede desbordar al día siguiente)
             for (Integer taskDuration : tasks) {
                 if (currentTime + taskDuration > RoutingRules.MAX_WORK_DAY) {
 
-                    // 🔥 NUEVA LÓGICA: VERIFICAR SI EL PUNTO ACTUAL ES PC O OC
                     if (targetPoint.getCategory() == Location.Category.OC) {
-                        // ❌ NO se puede pernoctar en OC
+                        // Punto objetivo es OC → buscar PC para pernoctar
+                        Integer pcIdx = findNearestPcForOvernight(
+                                allPoints, pathIndices, currentLocIdx, timeMatrix);
 
-                        Integer pcForOvernightIdx = findPcForOvernight(
-                                currentLog, allPoints, pathIndices,
-                                currentLocIdx, timeMatrix);
+                        if (pcIdx != null) {
+                            int travelToPc = (int) timeMatrix[currentLocIdx][pcIdx];
+                            currentTime += travelToPc;
+                            currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelToPc);
 
-                        if (pcForOvernightIdx != null) {
-                            // Retroceder al PC
-                            int travelTimeToPc = (int) timeMatrix[currentLocIdx][pcForOvernightIdx];
-                            currentTime += travelTimeToPc;
-                            currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelTimeToPc);
-
-                            closeDay(currentLog, allPoints.get(pcForOvernightIdx).getName(),
+                            closeDay(currentLog,
+                                    allPoints.get(pcIdx).getName(),
                                     "Pernocte en PC cercana. Actividades de OC continúan mañana.",
                                     currentTime);
-
                             logs.add(currentLog);
                             nights++;
                             currentDay++;
                             currentTime = 0;
 
-                            // Nuevo día en PC
-                            currentLog = startNewDay(currentDay, allPoints.get(pcForOvernightIdx).getName());
+                            currentLog = startNewDay(currentDay, allPoints.get(pcIdx).getName());
 
-                            // Viajar del PC al OC para continuar actividades
-                            int travelFromPcToOc = (int) timeMatrix[pcForOvernightIdx][targetIdx];
+                            int travelFromPcToOc = (int) timeMatrix[pcIdx][targetIdx];
                             currentTime += travelFromPcToOc;
                             currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelFromPcToOc);
 
                         } else {
-                            // Caso excepcional: no hay PC
-                            closeDay(currentLog, targetPoint.getName(),
-                                    "⚠️ EXCEPCIÓN: Pernocte en OC (no hay PC cercana). Actividades continúan mañana.",
+                            closeDay(currentLog,
+                                    targetPoint.getName(),
+                                    "⚠️ EXCEPCIÓN: Sin PC disponible; pernocte forzado en OC. Actividades continúan mañana.",
                                     currentTime);
-
                             logs.add(currentLog);
                             nights++;
                             currentDay++;
@@ -161,11 +156,11 @@ public class ItineraryCalculator {
                         }
 
                     } else {
-                        // ✅ Es PC, pernocte normal
-                        closeDay(currentLog, targetPoint.getName(),
+                        // Punto objetivo es PC → pernocte normal
+                        closeDay(currentLog,
+                                targetPoint.getName(),
                                 "Pernocte en PC. Actividades continúan mañana.",
                                 currentTime);
-
                         logs.add(currentLog);
                         nights++;
                         currentDay++;
@@ -177,72 +172,73 @@ public class ItineraryCalculator {
                 currentTime += taskDuration;
                 currentLog.setWorkMinutes(currentLog.getWorkMinutes() + taskDuration);
 
-                // Registrar que se trabajó en este punto este día
                 if (!currentLog.getActivityPoints().contains(targetPoint.getName())) {
                     currentLog.getActivityPoints().add(targetPoint.getName());
                 }
             }
 
-            // Guardar conteo de OCs para el badge de la UI (+1 OC, etc)
             currentLog.getActivityOcCounts().put(targetPoint.getName(), targetPoint.getOcCount());
         }
 
-        // ---- 4. Lógica de Retorno a ODS ----
-        int originIdx = pathIndices.get(0);
+        // ── 4. Retorno a ODS ──────────────────────────────────────────────────────
+        //
+        // REGLA: La ODS es únicamente destino final; NO es punto de pernocte.
+        // Si el retorno excede MAX_TOTAL_DAY, hay que pernoctar en una PC
+        // y retornar al día siguiente.
+        //
+        int originIdx = pathIndices.get(0); // índice 0 = ODS
         int returnTime = (int) timeMatrix[currentLocIdx][originIdx];
 
-        // Validar si el retorno cabe en el límite extendido (11h / 660min)
         if (currentTime + returnTime > RoutingRules.MAX_TOTAL_DAY) {
 
-            // 🔥 NUEVA LÓGICA: VERIFICAR SI UBICACIÓN ACTUAL ES PC O OC
             Location currentLocation = allPoints.get(currentLocIdx);
 
-            if (currentLocation.getCategory() == Location.Category.OC) {
-                // ❌ NO se puede pernoctar en OC
+            if (currentLocation.getCategory() == Location.Category.OC
+                    || currentLocIdx == 0) {
+                // Estamos en OC (o en la propia ODS, situación anómala):
+                // buscar PC para pernoctar antes del retorno.
+                Integer pcIdx = findNearestPcForOvernight(
+                        allPoints, pathIndices, currentLocIdx, timeMatrix);
 
-                Integer pcForOvernightIdx = findPcForOvernight(
-                        currentLog, allPoints, pathIndices,
-                        currentLocIdx, timeMatrix);
+                if (pcIdx != null) {
+                    int travelToPc = (int) timeMatrix[currentLocIdx][pcIdx];
+                    currentTime += travelToPc;
+                    currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelToPc);
 
-                if (pcForOvernightIdx != null) {
-                    // Retroceder al PC
-                    int travelTimeToPc = (int) timeMatrix[currentLocIdx][pcForOvernightIdx];
-                    currentTime += travelTimeToPc;
-                    currentLog.setTravelMinutes(currentLog.getTravelMinutes() + travelTimeToPc);
-
-                    closeDay(currentLog, allPoints.get(pcForOvernightIdx).getName(),
-                            "Pernocte en PC cercana antes del retorno final (no se permite pernoctar en OC).",
+                    closeDay(currentLog,
+                            allPoints.get(pcIdx).getName(),
+                            "Pernocte en PC antes del retorno final (no se permite pernoctar en OC ni en ODS).",
                             currentTime);
-
                     logs.add(currentLog);
                     nights++;
                     currentDay++;
                     currentTime = 0;
 
-                    // Nuevo día en PC, listo para retornar a ODS
-                    currentLog = startNewDay(currentDay, allPoints.get(pcForOvernightIdx).getName());
-                    currentLocIdx = pcForOvernightIdx;
-                    returnTime = (int) timeMatrix[pcForOvernightIdx][originIdx];
+                    // Nuevo día desde la PC; recalcular tiempo de retorno a ODS
+                    currentLog = startNewDay(currentDay, allPoints.get(pcIdx).getName());
+                    currentLocIdx = pcIdx;
+                    returnTime = (int) timeMatrix[pcIdx][originIdx];
 
                 } else {
-                    // Caso excepcional: pernoctar en OC
-                    closeDay(currentLog, allPoints.get(currentLocIdx).getName(),
-                            "⚠️ EXCEPCIÓN: Pernocte en OC antes de retorno (no hay PC cercana a la OC).",
+                    // Sin PC → cerrar día en OC (excepción inevitable)
+                    closeDay(currentLog,
+                            allPoints.get(currentLocIdx).getName(),
+                            "⚠️ EXCEPCIÓN: Sin PC disponible; pernocte forzado en OC antes del retorno.",
                             currentTime);
-
                     logs.add(currentLog);
                     nights++;
                     currentDay++;
                     currentTime = 0;
                     currentLog = startNewDay(currentDay, allPoints.get(currentLocIdx).getName());
+                    returnTime = (int) timeMatrix[currentLocIdx][originIdx];
                 }
 
             } else {
-                // ✅ Es PC, pernocte normal antes del retorno
-                closeDay(currentLog, allPoints.get(currentLocIdx).getName(),
+                // Estamos en una PC → pernocte normal antes del retorno
+                closeDay(currentLog,
+                        allPoints.get(currentLocIdx).getName(),
                         "Pernocte en PC antes del retorno final.",
                         currentTime);
-
                 logs.add(currentLog);
                 nights++;
                 currentDay++;
@@ -251,12 +247,11 @@ public class ItineraryCalculator {
             }
         }
 
+        // ── 5. Día de retorno ─────────────────────────────────────────────────────
         currentTime += returnTime;
         currentLog.setTravelMinutes(currentLog.getTravelMinutes() + returnTime);
 
-        // Calcular sobretiempo final del día de retorno
         int overtime = Math.max(0, currentTime - RoutingRules.MAX_WORK_DAY);
-
         currentLog.setOvertimeMinutes(overtime);
         currentLog.setTotalDayMinutes(currentTime);
         currentLog.setFinalLocation("ODS (Retorno)");
@@ -270,7 +265,7 @@ public class ItineraryCalculator {
         return new ItineraryResult(currentDay, nights, logs);
     }
 
-    // ================== Helpers privados ==================
+    // ═══════════════════════════ Helpers privados ════════════════════════════
 
     private DayLog startNewDay(int day, String locationName) {
         DayLog log = new DayLog();
@@ -291,111 +286,89 @@ public class ItineraryCalculator {
         log.setFinalLocation(finalLocation);
         log.setNote(note);
         log.setTotalDayMinutes(totalMinutes);
-
-        // Calcular sobretiempo de la jornada (si excede MAX_WORK_DAY)
         int overtime = Math.max(0, totalMinutes - RoutingRules.MAX_WORK_DAY);
         log.setOvertimeMinutes(overtime);
     }
 
     /**
-     * 🔥 NUEVO MÉTODO MEJORADO: Encuentra un PC para pernoctar
+     * Busca la PC más cercana donde se pueda pernoctar.
      *
-     * Estrategia:
-     * 1. Busca el último PC visitado en el día actual
-     * 2. Si no hay, busca el PC más cercano dentro de un radio de 5km
+     * Estrategia en dos pasos:
+     *   1. Buscar entre los índices del path actual (excluyendo ODS = índice 0).
+     *   2. Si no hay ninguna, buscar en TODOS los puntos del sistema
+     *      (también excluyendo ODS = índice 0).
      *
-     * @param currentLog El log del día actual
-     * @param allPoints Lista de todos los puntos
-     * @param pathIndices Ruta completa
-     * @param currentLocationIdx Índice de la ubicación actual (OC)
-     * @param distanceMatrix Matriz de distancias
-     * @return Índice del PC para pernoctar, o null si no hay ninguno disponible
+     * Nunca devuelve el índice 0 (ODS).
      */
-    private Integer findPcForOvernight(
-            DayLog currentLog,
+    private Integer findNearestPcForOvernight(
             List<Location> allPoints,
             List<Integer> pathIndices,
             int currentLocationIdx,
             double[][] distanceMatrix
     ) {
-        // Estrategia: Buscar el PC más cercano en TODA la ruta actual, sin límites de radio
         Integer nearestPcIdx = null;
         double minDistance = Double.MAX_VALUE;
 
+        // ── Paso 1: buscar en los puntos del path (sin ODS) ─────────────────
         for (int idx : pathIndices) {
-            Location point = allPoints.get(idx);
-
-            // REGLA ESTRICTA: Solo categoría PC y que NO sea el origen (índice 0)
-            if (point.getCategory() == Location.Category.PC && idx != 0) {
-                double distance = distanceMatrix[currentLocationIdx][idx];
-                if (distance < minDistance) {
-                    minDistance = distance;
-                    nearestPcIdx = idx;
-                }
-            }
-        }
-        return nearestPcIdx;
-    }
-
-    /**
-     * Encuentra el último punto PC visitado en el día actual
-     * @return Índice del último PC visitado en el día, o null si no hay ninguno
-     */
-    private Integer findLastPcInDay(DayLog currentLog, List<Location> allPoints, List<Integer> pathIndices) {
-        // Buscar en los puntos de actividad del día actual (en orden inverso)
-        List<String> activityPoints = currentLog.getActivityPoints();
-
-        for (int i = activityPoints.size() - 1; i >= 0; i--) {
-            String pointName = activityPoints.get(i);
-
-            // Buscar este punto en allPoints
-            Location point = allPoints.stream()
-                    .filter(p -> p.getName().equals(pointName))
-                    .findFirst()
-                    .orElse(null);
-
-            if (point != null && point.getCategory() == Location.Category.PC) {
-                // Encontrar el índice de este punto en pathIndices
-                for (int idx : pathIndices) {
-                    if (allPoints.get(idx).getName().equals(pointName)) {
-                        return idx;
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * 🔥 NUEVO MÉTODO: Busca el PC más cercano dentro de un radio de 5km
-     *
-     * @param currentLocationIdx Índice de la ubicación actual (OC)
-     * @param allPoints Lista de todos los puntos
-     * @param pathIndices Ruta completa
-     * @param distanceMatrix Matriz de distancias
-     * @return Índice del PC más cercano dentro del radio, o null si no hay ninguno
-     */
-    private Integer findNearestPcWithinRadius(
-            int currentLocationIdx,
-            List<Location> allPoints,
-            List<Integer> pathIndices,
-            double[][] distanceMatrix
-    ) {
-        Integer nearestPcIdx = null;
-        double minDistance = Double.MAX_VALUE;
-
-        for (int idx : pathIndices) {
+            if (idx == 0) continue; // ODS excluida explícitamente
             Location point = allPoints.get(idx);
             if (point.getCategory() != Location.Category.PC) continue;
 
-            double distance = distanceMatrix[currentLocationIdx][idx];
-            // Eliminamos la condición: distance <= PC_SEARCH_RADIUS_KM
-            if (distance < minDistance) {
-                minDistance = distance;
+            double dist = distanceMatrix[currentLocationIdx][idx];
+            if (dist < minDistance) {
+                minDistance = dist;
                 nearestPcIdx = idx;
             }
         }
-        return nearestPcIdx;
+
+        if (nearestPcIdx != null) return nearestPcIdx;
+
+        // ── Paso 2: fallback — buscar en TODOS los puntos (sin ODS) ─────────
+        for (int idx = 1; idx < allPoints.size(); idx++) {
+            Location point = allPoints.get(idx);
+            if (point.getCategory() != Location.Category.PC) continue;
+
+            // Verificar que la fila/columna exista en la matriz
+            if (currentLocationIdx >= distanceMatrix.length
+                    || idx >= distanceMatrix[currentLocationIdx].length) continue;
+
+            double dist = distanceMatrix[currentLocationIdx][idx];
+            if (dist < minDistance) {
+                minDistance = dist;
+                nearestPcIdx = idx;
+            }
+        }
+
+        return nearestPcIdx; // null si no existe ninguna PC en todo el sistema
+    }
+
+    // ── Métodos legacy mantenidos por compatibilidad (no se usan internamente) ──
+
+    @Deprecated
+    private Integer findLastPcInDay(DayLog currentLog, List<Location> allPoints,
+                                    List<Integer> pathIndices) {
+        List<String> activityPoints = currentLog.getActivityPoints();
+        for (int i = activityPoints.size() - 1; i >= 0; i--) {
+            String pointName = activityPoints.get(i);
+            Location point = allPoints.stream()
+                    .filter(p -> p.getName().equals(pointName))
+                    .findFirst().orElse(null);
+            if (point != null && point.getCategory() == Location.Category.PC) {
+                for (int idx : pathIndices) {
+                    if (allPoints.get(idx).getName().equals(pointName)) return idx;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Deprecated
+    private Integer findNearestPcWithinRadius(int currentLocationIdx,
+                                              List<Location> allPoints,
+                                              List<Integer> pathIndices,
+                                              double[][] distanceMatrix) {
+        return findNearestPcForOvernight(allPoints, pathIndices,
+                currentLocationIdx, distanceMatrix);
     }
 }
