@@ -50,16 +50,30 @@ public class GreedyRoutePlanner {
             double maxDist = -1;
 
             for (int idx : available) {
-                double d = evaluator.getDist(
-                        0, idx,
-                        allPoints.get(0),
-                        allPoints.get(idx),
-                        validator
-                );
+                double d = evaluator.getDist(0, idx, allPoints.get(0), allPoints.get(idx), validator);
                 if (d > maxDist && d != Double.POSITIVE_INFINITY) {
                     maxDist = d;
                     farthest = idx;
                 }
+            }
+
+            // Si el viaje es > 240min, forzar que el inicio sea una PC
+            double travelTimeToFarthest = durations[0][farthest];
+            if (travelTimeToFarthest > 240) {
+                // Buscar la PC más cercana a ese punto 'farthest' para que sea el primer destino
+                int bestPcIdx = farthest;
+                double minToPc = Double.MAX_VALUE;
+
+                for (int idx : available) {
+                    if (allPoints.get(idx).getCategory() == Location.Category.PC) {
+                        double d = distances[farthest][idx];
+                        if (d < minToPc) {
+                            minToPc = d;
+                            bestPcIdx = idx;
+                        }
+                    }
+                }
+                farthest = bestPcIdx; // Ahora el cluster empezará por esta PC
             }
 
             // B) neighbors

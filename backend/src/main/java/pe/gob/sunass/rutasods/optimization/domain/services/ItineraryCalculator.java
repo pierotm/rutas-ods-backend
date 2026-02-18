@@ -6,9 +6,7 @@ import pe.gob.sunass.rutasods.shared.domain.rules.RoutingRules;
 import java.util.*;
 
 public class ItineraryCalculator {
-
-    // 🔥 RADIO DE BÚSQUEDA PARA PC CERCANA (5 km)
-    private static final double PC_SEARCH_RADIUS_KM = 5.0;
+    private static final int OVERTIME_FOR_PERNOCTE = 60;
 
     public ItineraryResult calculate(
             List<Integer> pathIndices,
@@ -75,7 +73,7 @@ public class ItineraryCalculator {
                     } else {
                         // ⚠️ CASO EXCEPCIONAL: No hay PC disponible dentro del radio
                         closeDay(currentLog, allPoints.get(currentLocIdx).getName(),
-                                "⚠️ EXCEPCIÓN: Pernocte en OC (no hay PC disponible en radio de " + PC_SEARCH_RADIUS_KM + "km).",
+                                "⚠️ EXCEPCIÓN: Pernocte en OC (no hay PC disponible).",
                                 currentTime);
 
                         logs.add(currentLog);
@@ -152,7 +150,7 @@ public class ItineraryCalculator {
                         } else {
                             // Caso excepcional: no hay PC
                             closeDay(currentLog, targetPoint.getName(),
-                                    "⚠️ EXCEPCIÓN: Pernocte en OC (no hay PC en radio de " + PC_SEARCH_RADIUS_KM + "km). Actividades continúan mañana.",
+                                    "⚠️ EXCEPCIÓN: Pernocte en OC (no hay PC cercana). Actividades continúan mañana.",
                                     currentTime);
 
                             logs.add(currentLog);
@@ -229,7 +227,7 @@ public class ItineraryCalculator {
                 } else {
                     // Caso excepcional: pernoctar en OC
                     closeDay(currentLog, allPoints.get(currentLocIdx).getName(),
-                            "⚠️ EXCEPCIÓN: Pernocte en OC antes de retorno (no hay PC en radio de " + PC_SEARCH_RADIUS_KM + "km).",
+                            "⚠️ EXCEPCIÓN: Pernocte en OC antes de retorno (no hay PC cercana a la OC).",
                             currentTime);
 
                     logs.add(currentLog);
@@ -320,16 +318,22 @@ public class ItineraryCalculator {
             int currentLocationIdx,
             double[][] distanceMatrix
     ) {
-        // ESTRATEGIA 1: Buscar el último PC visitado en el día actual
-        Integer lastPcInDay = findLastPcInDay(currentLog, allPoints, pathIndices);
-        if (lastPcInDay != null) {
-            return lastPcInDay;
+        // Estrategia: Buscar el PC más cercano en TODA la ruta actual, sin límites de radio
+        Integer nearestPcIdx = null;
+        double minDistance = Double.MAX_VALUE;
+
+        for (int idx : pathIndices) {
+            Location point = allPoints.get(idx);
+
+            // REGLA ESTRICTA: Solo categoría PC y que NO sea el origen (índice 0)
+            if (point.getCategory() == Location.Category.PC && idx != 0) {
+                double distance = distanceMatrix[currentLocationIdx][idx];
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestPcIdx = idx;
+                }
+            }
         }
-
-        // ESTRATEGIA 2: Buscar PC más cercana dentro del radio de 5km
-        Integer nearestPcIdx = findNearestPcWithinRadius(
-                currentLocationIdx, allPoints, pathIndices, distanceMatrix);
-
         return nearestPcIdx;
     }
 
@@ -381,25 +385,17 @@ public class ItineraryCalculator {
         Integer nearestPcIdx = null;
         double minDistance = Double.MAX_VALUE;
 
-        // Buscar en todos los puntos de la ruta
         for (int idx : pathIndices) {
             Location point = allPoints.get(idx);
+            if (point.getCategory() != Location.Category.PC) continue;
 
-            // Solo considerar PCs
-            if (point.getCategory() != Location.Category.PC) {
-                continue;
-            }
-
-            // Calcular distancia desde ubicación actual
             double distance = distanceMatrix[currentLocationIdx][idx];
-
-            // Verificar si está dentro del radio y es más cercano
-            if (distance <= PC_SEARCH_RADIUS_KM && distance < minDistance) {
+            // Eliminamos la condición: distance <= PC_SEARCH_RADIUS_KM
+            if (distance < minDistance) {
                 minDistance = distance;
                 nearestPcIdx = idx;
             }
         }
-
         return nearestPcIdx;
     }
 }

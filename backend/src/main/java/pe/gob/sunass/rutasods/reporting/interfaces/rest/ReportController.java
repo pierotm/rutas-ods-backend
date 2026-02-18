@@ -7,17 +7,37 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pe.gob.sunass.rutasods.reporting.application.internal.GenerateExcelUseCase;
 import pe.gob.sunass.rutasods.reporting.application.internal.GeneratePdfUseCase;
+import pe.gob.sunass.rutasods.reporting.application.internal.GenerateMatrixExcelUseCase;
 
-@RestController
 @RequestMapping("/api/reports")
 public class ReportController {
 
     private final GenerateExcelUseCase generateExcelUseCase;
     private final GeneratePdfUseCase generatePdfUseCase;
+    private final GenerateMatrixExcelUseCase generateMatrixExcelUseCase; // 1. Agregar campo
 
-    public ReportController(GeneratePdfUseCase generatePdfUseCase, GenerateExcelUseCase generateExcelUseCase) {
+    // 2. Actualizar constructor para inyectar el nuevo UseCase
+    public ReportController(
+            GeneratePdfUseCase generatePdfUseCase,
+            GenerateExcelUseCase generateExcelUseCase,
+            GenerateMatrixExcelUseCase generateMatrixExcelUseCase) {
         this.generatePdfUseCase = generatePdfUseCase;
         this.generateExcelUseCase = generateExcelUseCase;
+        this.generateMatrixExcelUseCase = generateMatrixExcelUseCase;
+    }
+
+    /**
+     * Endpoint para descargar la matriz de distancias y tiempos
+     * GET /api/reports/matriz/excel/{sessionId}
+     */
+    @GetMapping("/matriz/excel/{sessionId}")
+    public ResponseEntity<byte[]> downloadMatrixExcel(@PathVariable String sessionId) {
+        byte[] file = generateMatrixExcelUseCase.execute(sessionId);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=matriz_rutas.xlsx")
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(file);
     }
 
     /**

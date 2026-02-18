@@ -104,3 +104,27 @@ export const downloadMasterPDF = async (sessionId: string): Promise<void> => {
     throw error;
   }
 };
+
+export const downloadMatrixExcel = async (sessionId: string): Promise<void> => {
+  try {
+    // Asegúrate de que esta URL coincida con el @RequestMapping de ReportController en el backend
+    const response = await fetch(`/api/reports/matriz/excel/${sessionId}`);
+
+    if (!response.ok) {
+      throw new Error(`Error al descargar Excel: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Matriz_Distancias_${sessionId}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Error al descargar el Excel de la matriz:", error);
+    throw error;
+  }
+};
