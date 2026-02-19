@@ -16,7 +16,7 @@ import { parseCoords } from "./utils/coords";
 
 import MapClickHandler from "./ui/components/MapClickHandler";
 import MapSearchControl from "./ui/components/MapSearchControl";
-import { createCustomIcon } from "./ui/components/icons";
+import { createCustomIcon, createOdsIcon } from "./ui/components/icons";
 import LoginPin from "./ui/components/LoginPin";
 import { isAuthenticated, clearSession } from "./config/auth";
 import { downloadMasterCSV, downloadMasterPDF } from "./services/export";
@@ -51,6 +51,7 @@ export default function App() {
   const [rawTimeMatrix, setRawTimeMatrix] = useState<number[][]>([]);
   const [matrixLocations, setMatrixLocations] = useState<Location[]>([]);
   const [odsInput, setOdsInput] = useState<string>("");
+  const [odsCoords, setOdsCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const [costs, setCosts] = useState({ km: 1, food: 180, hotel: 570 });
   const [timeFactor, setTimeFactor] = useState<number>(1.0);
@@ -806,6 +807,27 @@ export default function App() {
               <MapClickHandler onClick={handleMapClick} />
               <MapSearchControl />
 
+              {odsCoords && (
+                  <Marker
+                      position={[odsCoords.lat, odsCoords.lng]}
+                      icon={createOdsIcon()}
+                      zIndexOffset={1000}
+                  >
+                    <Popup>
+                      <div className="p-1 font-sans">
+                        <p className="font-black text-red-600 text-sm">📍 ODS — Punto de Origen</p>
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Lat: {odsCoords.lat.toFixed(5)}<br />
+                          Lng: {odsCoords.lng.toFixed(5)}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1 italic">
+                          Base de inicio y retorno de todas las rutas.
+                        </p>
+                      </div>
+                    </Popup>
+                  </Marker>
+              )}
+
               {locations.map((loc, idx) => (
                 <Marker
                   key={loc.id}
@@ -886,7 +908,11 @@ export default function App() {
                   <input
                     type="text"
                     value={odsInput}
-                    onChange={(e) => setOdsInput(e.target.value)}
+                    onChange={(e) => {
+                      setOdsInput(e.target.value);
+                      const parsed = parseCoords(e.target.value);
+                      setOdsCoords(parsed);
+                    }}
                     placeholder="-12.0464, -77.0428"
                     className="w-full bg-transparent text-sm font-bold text-slate-700 outline-none focus:text-sunass-blue transition-colors"
                   />

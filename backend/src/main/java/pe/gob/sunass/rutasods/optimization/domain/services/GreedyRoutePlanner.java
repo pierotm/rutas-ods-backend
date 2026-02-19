@@ -178,8 +178,9 @@ public class GreedyRoutePlanner {
                         );
 
 
-                        double metric =
-                                totalCost / perm.size();
+                        // Nueva métrica con factor de penalización por dispersión (ejemplo: +10% por cada 100km)
+                        double dispersionPenalty = 1.0 + (distanceKm / 1000.0);
+                        double metric = (totalCost / perm.size()) * dispersionPenalty;
 
                         if (bestCandidate == null ||
                                 metric < bestCandidate.getMetric()) {
