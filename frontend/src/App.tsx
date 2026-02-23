@@ -45,7 +45,7 @@ export default function App() {
     setIsAuth(false);
   };
   const [locations, setLocations] = useState<Location[]>([]);
-  const [targetPoints, setTargetPoints] = useState<number>(120);
+  const [targetPoints, setTargetPoints] = useState<number>(160);
   const [distanceMatrix, setDistanceMatrix] = useState<Matrix>([]);
   const [timeMatrix, setTimeMatrix] = useState<Matrix>([]);
   const [rawTimeMatrix, setRawTimeMatrix] = useState<number[][]>([]);
