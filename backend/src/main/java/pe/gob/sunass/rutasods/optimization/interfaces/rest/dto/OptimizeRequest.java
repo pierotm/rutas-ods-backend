@@ -27,6 +27,9 @@ public class OptimizeRequest {
 
     private ConstraintsDto constraints;
 
+    private Integer activityCount;   // 2 o 4
+    private String activityOption;   // "A" o "B" (solo aplica cuando activityCount = 2)
+
     // ✅ Clases internas con campos PÚBLICOS para compatibilidad con código existente
     @NoArgsConstructor
     @AllArgsConstructor

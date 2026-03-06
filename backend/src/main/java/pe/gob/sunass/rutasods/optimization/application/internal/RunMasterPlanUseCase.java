@@ -136,6 +136,21 @@ public class RunMasterPlanUseCase {
                         (a, b) -> true // isValidConnection stub
                 );
 
+        // Asignar actividades a cada ruta
+        int actCount = request.getActivityCount() != null ? request.getActivityCount() : 4;
+        String actOption = request.getActivityOption() != null ? request.getActivityOption() : "A";
+
+        for (int i = 0; i < routes.size(); i++) {
+            String activity;
+            if (actCount == 2) {
+                activity = actOption; // "A" o "B" para todas las rutas
+            } else {
+                // 4 actividades: alternancia impar/par (i=0 → A, i=1 → B, i=2 → A, ...)
+                activity = (i % 2 == 0) ? "A" : "B";
+            }
+            routes.get(i).setActivity(activity);
+        }
+
 
         // 7) totales
         double totalSystemCost =

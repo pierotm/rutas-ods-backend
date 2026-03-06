@@ -61,6 +61,10 @@ export default function App() {
 
   const [coverageLimit, setCoverageLimit] = useState<number>(0);
 
+  // Estado de actividades
+  const [activityCount, setActivityCount] = useState<2 | 4>(4);
+  const [activityOption, setActivityOption] = useState<"A" | "B">("A");
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [masterPlan, setMasterPlan] = useState<MasterPlanResult | null>(null);
@@ -165,11 +169,11 @@ export default function App() {
         );
         const lng = parseFloat(
           row.Longitud ||
-            row.longitud ||
-            row.Lng ||
-            row.lng ||
-            row.Lon ||
-            row.lon,
+          row.longitud ||
+          row.Lng ||
+          row.lng ||
+          row.Lon ||
+          row.lon,
         );
         const ubigeo = (row.Ubigeo || row.ubigeo || "").toString().trim();
 
@@ -404,6 +408,8 @@ export default function App() {
           hotel: costs.hotel,
         },
         timeFactor,
+        activityCount,
+        activityOption,
       };
 
       console.log("📤 Enviando al backend:", payload);
@@ -450,6 +456,7 @@ export default function App() {
           nights: route.nights || 0,
           days: route.days || 0,
           color: ROUTE_COLORS[idx % ROUTE_COLORS.length],
+          activity: route.activity || (idx % 2 === 0 ? "A" : "B"),
         };
       });
 
@@ -597,6 +604,12 @@ export default function App() {
                   </h4>
                   <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold">
                     {route.points.length} puntos
+                  </span>
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-black ${route.activity === "A"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-purple-100 text-purple-700"
+                    }`}>
+                    {route.activity === "A" ? "Fiscalización + Usuarios" : "Caracterización + Cuota Familiar"}
                   </span>
                 </div>
                 <div className="flex gap-4 text-xs font-mono font-bold text-slate-600 mt-2 md:mt-0">
@@ -808,24 +821,24 @@ export default function App() {
               <MapSearchControl />
 
               {odsCoords && (
-                  <Marker
-                      position={[odsCoords.lat, odsCoords.lng]}
-                      icon={createOdsIcon()}
-                      zIndexOffset={1000}
-                  >
-                    <Popup>
-                      <div className="p-1 font-sans">
-                        <p className="font-black text-red-600 text-sm">📍 ODS — Punto de Origen</p>
-                        <p className="text-[10px] text-slate-500 mt-1">
-                          Lat: {odsCoords.lat.toFixed(5)}<br />
-                          Lng: {odsCoords.lng.toFixed(5)}
-                        </p>
-                        <p className="text-[10px] text-slate-400 mt-1 italic">
-                          Base de inicio y retorno de todas las rutas.
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
+                <Marker
+                  position={[odsCoords.lat, odsCoords.lng]}
+                  icon={createOdsIcon()}
+                  zIndexOffset={1000}
+                >
+                  <Popup>
+                    <div className="p-1 font-sans">
+                      <p className="font-black text-red-600 text-sm">📍 ODS — Punto de Origen</p>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Lat: {odsCoords.lat.toFixed(5)}<br />
+                        Lng: {odsCoords.lng.toFixed(5)}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-1 italic">
+                        Base de inicio y retorno de todas las rutas.
+                      </p>
+                    </div>
+                  </Popup>
+                </Marker>
               )}
 
               {locations.map((loc, idx) => (
@@ -842,11 +855,10 @@ export default function App() {
                       </p>
                       <button
                         onClick={() => handleToggleActive(loc.id)}
-                        className={`w-full py-2 rounded-lg text-[9px] font-black uppercase ${
-                          loc.isActive
+                        className={`w-full py-2 rounded-lg text-[9px] font-black uppercase ${loc.isActive
                             ? "bg-red-50 text-red-600"
                             : "bg-emerald-50 text-emerald-600"
-                        }`}
+                          }`}
                       >
                         {loc.isActive ? "Desactivar Punto" : "Activar Punto"}
                       </button>
@@ -928,11 +940,10 @@ export default function App() {
                         <button
                           key={t}
                           onClick={() => setPcDuration(t)}
-                          className={`flex-1 min-w-[50px] py-2 rounded-xl text-[10px] font-black border-2 transition-all ${
-                            pcDuration === t
+                          className={`flex-1 min-w-[50px] py-2 rounded-xl text-[10px] font-black border-2 transition-all ${pcDuration === t
                               ? "border-sunass-blue bg-blue-50 text-sunass-blue"
                               : "border-slate-50 text-slate-300 hover:border-slate-200"
-                          }`}
+                            }`}
                         >
                           {t / 60}h
                         </button>
@@ -949,17 +960,75 @@ export default function App() {
                         <button
                           key={t}
                           onClick={() => setOcDuration(t)}
-                          className={`flex-1 min-w-[50px] py-2 rounded-xl text-[10px] font-black border-2 transition-all ${
-                            ocDuration === t
+                          className={`flex-1 min-w-[50px] py-2 rounded-xl text-[10px] font-black border-2 transition-all ${ocDuration === t
                               ? "border-sunass-blue bg-blue-50 text-sunass-blue"
                               : "border-slate-50 text-slate-300 hover:border-slate-200"
-                          }`}
+                            }`}
                         >
                           {t / 60}h
                         </button>
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* SELECTOR DE ACTIVIDADES */}
+                <div className="space-y-3">
+                  <label className="block text-[9px] font-black text-slate-500 uppercase mb-2 ml-1">
+                    <i className="fa-solid fa-clipboard-list mr-1"></i> Cantidad de Actividades
+                  </label>
+                  <div className="flex gap-1">
+                    {([2, 4] as const).map((count) => (
+                      <button
+                        key={count}
+                        onClick={() => setActivityCount(count)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black border-2 transition-all ${activityCount === count
+                            ? "border-sunass-blue bg-blue-50 text-sunass-blue"
+                            : "border-slate-50 text-slate-300 hover:border-slate-200"
+                          }`}
+                      >
+                        {count} Actividades
+                      </button>
+                    ))}
+                  </div>
+
+                  {activityCount === 2 ? (
+                    <div className="space-y-2">
+                      <p className="text-[8px] font-bold text-slate-400 uppercase ml-1">Seleccionar combinación:</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setActivityOption("A")}
+                          className={`flex-1 py-2.5 rounded-xl text-[10px] font-black border-2 transition-all ${activityOption === "A"
+                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                              : "border-slate-100 text-slate-400 hover:border-slate-200"
+                            }`}
+                        >
+                          <span className="block">Opción A</span>
+                          <span className="text-[8px] font-medium opacity-70">Fiscalización + Usuarios</span>
+                        </button>
+                        <button
+                          onClick={() => setActivityOption("B")}
+                          className={`flex-1 py-2.5 rounded-xl text-[10px] font-black border-2 transition-all ${activityOption === "B"
+                              ? "border-purple-500 bg-purple-50 text-purple-700"
+                              : "border-slate-100 text-slate-400 hover:border-slate-200"
+                            }`}
+                        >
+                          <span className="block">Opción B</span>
+                          <span className="text-[8px] font-medium opacity-70">Caracterización + Cuota Familiar</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <p className="text-[9px] font-bold text-slate-500 text-center">
+                        <i className="fa-solid fa-arrows-rotate mr-1"></i>
+                        Ambas opciones en alternancia
+                      </p>
+                      <p className="text-[8px] text-slate-400 text-center mt-1">
+                        Ruta impar → Fiscalización + Usuarios | Ruta par → Caracterización + Cuota Familiar
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1004,7 +1073,7 @@ export default function App() {
                           ]);
                         }
                       }}
-                      
+
                       className="w-full bg-transparent text-sm font-black text-slate-700 outline-none"
                     />
                   </div>
@@ -1118,29 +1187,29 @@ export default function App() {
             </div>
 
             {viewMode === "optimization" && masterPlan && sessionId && (
-                <div className="flex gap-4">
-                  <button
-                      onClick={handleDownloadPDF}
-                      className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl hover:-translate-y-1 active:translate-y-0 flex items-center gap-3"
-                  >
-                    <i className="fa-solid fa-file-pdf text-sm"></i> PDF
-                  </button>
-                  <button
-                      onClick={handleDownloadExcel}
-                      className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
-                  >
-                    <i className="fa-solid fa-file-excel mr-2"></i>
-                    Plan Excel
-                  </button>
-                  {/* 🔥 NUEVO BOTÓN DE MATRIZ */}
-                  <button
-                      onClick={handleDownloadMatrix}
-                      className="px-8 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
-                  >
-                    <i className="fa-solid fa-table mr-2"></i>
-                    Matriz Excel
-                  </button>
-                </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={handleDownloadPDF}
+                  className="bg-slate-700 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-xl hover:-translate-y-1 active:translate-y-0 flex items-center gap-3"
+                >
+                  <i className="fa-solid fa-file-pdf text-sm"></i> PDF
+                </button>
+                <button
+                  onClick={handleDownloadExcel}
+                  className="px-8 py-3 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+                >
+                  <i className="fa-solid fa-file-excel mr-2"></i>
+                  Plan Excel
+                </button>
+                {/* 🔥 NUEVO BOTÓN DE MATRIZ */}
+                <button
+                  onClick={handleDownloadMatrix}
+                  className="px-8 py-3 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg"
+                >
+                  <i className="fa-solid fa-table mr-2"></i>
+                  Matriz Excel
+                </button>
+              </div>
             )}
           </div>
 

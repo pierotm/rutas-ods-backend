@@ -24,5 +24,7 @@ public class RouteSegment {
 
     private String color;
 
+    private String activity; // "A" (Fiscalización + Usuarios) o "B" (Caracterización + Cuota Familiar)
+
     // getters/setters
 }

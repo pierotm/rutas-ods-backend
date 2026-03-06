@@ -51,6 +51,7 @@ export interface RouteSegment {
   nights: number;
   days: number;
   color: string;
+  activity: string;
 }
 
 export interface MasterPlanResult {

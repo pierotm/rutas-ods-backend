@@ -26,6 +26,8 @@ public class RouteSegmentDto {
 
     private List<LocationDto> points;
 
+    private String activity;
+
     public static RouteSegmentDto fromDomain(
             RouteSegment r) {
 
@@ -47,6 +49,7 @@ public class RouteSegmentDto {
         );
 
         dto.setColor(r.getColor());
+        dto.setActivity(r.getActivity());
         dto.setBreakdown(
                 CostBreakdownDto.fromDomain(r.getBreakdown())
         );

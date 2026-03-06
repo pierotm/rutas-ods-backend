@@ -1,9 +1,6 @@
 package pe.gob.sunass.rutasods.reporting.infrastructure.excel;
 
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.ss.util.CellRangeAddressList;
-import org.apache.poi.xssf.usermodel.XSSFDataValidationHelper;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import pe.gob.sunass.rutasods.shared.domain.model.RouteSegment;
@@ -11,7 +8,6 @@ import pe.gob.sunass.rutasods.shared.domain.model.DayLog;
 import pe.gob.sunass.rutasods.shared.domain.model.Location;
 
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -43,8 +39,7 @@ public class ExcelGenerator {
                     "Duración (min)", "Costo Estimado (S/.)"
             };
 
-            // Lista para rastrear las filas de evento "Actividad" (para dropdowns)
-            List<Integer> activityRowIndices = new ArrayList<>();
+
 
             for (int i = 0; i < cols.length; i++) {
                 header.createCell(i).setCellValue(cols[i]);
@@ -116,13 +111,25 @@ public class ExcelGenerator {
                             ubigeo = pt.getUbigeo();
                         }
 
-                        activityRowIndices.add(rowIdx); // Guardar índice de fila "Actividad"
+                        // ✅ AUTO-RELLENAR ACTIVIDADES SEGÚN LA OPCIÓN DE RUTA
+                        String actividad1 = "";
+                        String actividad2 = "";
+                        if ("A".equals(r.getActivity())) {
+                            actividad1 = "Fiscalización";
+                            actividad2 = "Usuarios";
+                        } else if ("B".equals(r.getActivity())) {
+                            actividad1 = "Caracterización";
+                            actividad2 = "Cuota Familiar";
+                        }
+
                         rowIdx = addRow(sheet, rowIdx,
                                 r.getName(),
                                 log.getDay(),
                                 ubigeo,
                                 "Actividad",
                                 pName + " (" + label + ")",
+                                actividad1,
+                                actividad2,
                                 String.valueOf(duration),
                                 0);
 
@@ -229,31 +236,6 @@ public class ExcelGenerator {
                 sheet.autoSizeColumn(i);
             }
 
-            // =============== DROPDOWNS PARA ACTIVIDAD 1 Y ACTIVIDAD 2 ===============
-            if (!activityRowIndices.isEmpty()) {
-                XSSFSheet xssfSheet = (XSSFSheet) sheet;
-                XSSFDataValidationHelper dvHelper = new XSSFDataValidationHelper(xssfSheet);
-
-                String[] actividad1Options = {"DF", "DAP"};
-                String[] actividad2Options = {"DU", "DRE"};
-
-                for (int actRow : activityRowIndices) {
-                    // Dropdown Actividad 1 (columna 5)
-                    CellRangeAddressList range1 = new CellRangeAddressList(actRow, actRow, 5, 5);
-                    DataValidationConstraint constraint1 = dvHelper.createExplicitListConstraint(actividad1Options);
-                    DataValidation validation1 = dvHelper.createValidation(constraint1, range1);
-                    validation1.setShowErrorBox(true);
-                    xssfSheet.addValidationData(validation1);
-
-                    // Dropdown Actividad 2 (columna 6)
-                    CellRangeAddressList range2 = new CellRangeAddressList(actRow, actRow, 6, 6);
-                    DataValidationConstraint constraint2 = dvHelper.createExplicitListConstraint(actividad2Options);
-                    DataValidation validation2 = dvHelper.createValidation(constraint2, range2);
-                    validation2.setShowErrorBox(true);
-                    xssfSheet.addValidationData(validation2);
-                }
-            }
-
             wb.write(out);
             return out.toByteArray();
 
@@ -275,6 +257,22 @@ public class ExcelGenerator {
             String duration,
             double cost
     ) {
+        return addRow(sheet, rowIdx, route, day, ubigeo, event, detail, "", "", duration, cost);
+    }
+
+    private int addRow(
+            Sheet sheet,
+            int rowIdx,
+            String route,
+            int day,
+            String ubigeo,
+            String event,
+            String detail,
+            String actividad1,
+            String actividad2,
+            String duration,
+            double cost
+    ) {
 
         Row row = sheet.createRow(rowIdx++);
 
@@ -283,8 +281,8 @@ public class ExcelGenerator {
         row.createCell(2).setCellValue(ubigeo);
         row.createCell(3).setCellValue(event);
         row.createCell(4).setCellValue(detail);
-        row.createCell(5).setCellValue("");  // Actividad 1 (vacío por defecto)
-        row.createCell(6).setCellValue("");  // Actividad 2 (vacío por defecto)
+        row.createCell(5).setCellValue(actividad1);  // Actividad 1
+        row.createCell(6).setCellValue(actividad2);  // Actividad 2
         row.createCell(7).setCellValue(duration);
 
         Cell c = row.createCell(8);
