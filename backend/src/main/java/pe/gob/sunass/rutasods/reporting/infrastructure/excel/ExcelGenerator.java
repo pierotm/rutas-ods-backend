@@ -116,7 +116,7 @@ public class ExcelGenerator {
                         String actividad2 = "";
                         if ("A".equals(r.getActivity())) {
                             actividad1 = "Fiscalización";
-                            actividad2 = "Usuarios";
+                            actividad2 = "Cuota Familiar";
                         } else if ("B".equals(r.getActivity())) {
                             actividad1 = "Caracterización";
                             actividad2 = "Cuota Familiar";

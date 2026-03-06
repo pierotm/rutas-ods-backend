@@ -609,7 +609,7 @@ export default function App() {
                       ? "bg-emerald-100 text-emerald-700"
                       : "bg-purple-100 text-purple-700"
                     }`}>
-                    {route.activity === "A" ? "Fiscalización + Usuarios" : "Caracterización + Cuota Familiar"}
+                    {route.activity === "A" ? "Fiscalización + Cuota Familiar" : "Caracterización + Cuota Familiar"}
                   </span>
                 </div>
                 <div className="flex gap-4 text-xs font-mono font-bold text-slate-600 mt-2 md:mt-0">
@@ -1004,7 +1004,7 @@ export default function App() {
                             }`}
                         >
                           <span className="block">Opción A</span>
-                          <span className="text-[8px] font-medium opacity-70">Fiscalización + Usuarios</span>
+                          <span className="text-[8px] font-medium opacity-70">Fiscalización + Cuota familiar</span>
                         </button>
                         <button
                           onClick={() => setActivityOption("B")}
@@ -1025,7 +1025,7 @@ export default function App() {
                         Ambas opciones en alternancia
                       </p>
                       <p className="text-[8px] text-slate-400 text-center mt-1">
-                        Ruta impar → Fiscalización + Usuarios | Ruta par → Caracterización + Cuota Familiar
+                        Ruta impar → Fiscalización + Cuota familiar | Ruta par → Caracterización + Cuota Familiar
                       </p>
                     </div>
                   )}
